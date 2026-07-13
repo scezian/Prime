@@ -1,0 +1,14 @@
+[Unit]
+Description=Prime Daemon - laptop control API for the Prime Android app
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/prime-daemon
+ExecStart=%h/Projects/prime-daemon/run.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

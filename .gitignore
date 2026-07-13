@@ -1,0 +1,43 @@
+# ---- Python / prime-daemon ----
+prime-daemon/venv/
+prime-daemon/__pycache__/
+prime-daemon/app/__pycache__/
+**/__pycache__/
+*.pyc
+
+# ---- Flutter / Dart (prime_app, prime_app_lib) ----
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+
+# Android — machine-specific paths, never commit
+**/android/local.properties
+**/android/key.properties
+**/android/**/*.jks
+**/android/**/*.keystore
+
+# iOS / macOS ephemeral
+**/ios/Flutter/ephemeral/
+**/ios/Pods/
+**/macos/Flutter/ephemeral/
+
+# Linux/Windows desktop ephemeral build dirs
+**/linux/flutter/ephemeral/
+**/windows/flutter/ephemeral/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS junk
+.DS_Store
+
+# Secrets / local config — Prime's auth token lives in ~/.config/prime,
+# outside this repo, but exclude any stray env/token files just in case.
+*.env
+*.token
