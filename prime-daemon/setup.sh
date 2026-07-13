@@ -55,6 +55,14 @@ else
     echo "[prime] WARNING: passwordless pacman not working. Package install/uninstall via Prime won't work until this is fixed."
 fi
 
+echo "[prime] Checking user lingering (so the daemon can start at boot without a login)..."
+if [ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != "yes" ]; then
+    echo "[prime] Enabling lingering for $USER..."
+    sudo loginctl enable-linger "$USER"
+else
+    echo "[prime] Lingering already enabled."
+fi
+
 echo "[prime] Checking firewalld rule for Tailscale..."
 if command -v firewall-cmd &>/dev/null; then
     if ! sudo firewall-cmd --zone=trusted --query-interface=tailscale0 &>/dev/null; then
@@ -103,6 +111,11 @@ mkdir -p ~/.config/systemd/user
 cp prime-daemon.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable prime-daemon.service
+
+echo "[prime] Enabling lingering (daemon starts at boot, independent of login)..."
+if ! loginctl show-user "$USER" 2>/dev/null | grep -q "Linger=yes"; then
+    sudo loginctl enable-linger "$USER"
+fi
 
 echo "[prime] Starting daemon..."
 systemctl --user start prime-daemon.service
