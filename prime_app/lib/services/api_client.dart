@@ -122,6 +122,16 @@ class ApiClient {
     return res['result'] as Map<String, dynamic>;
   }
 
+  // ---- Dynamic service management ----
+
+  Future<List<dynamic>> listServices() async {
+    final res = await _get('/services');
+    return res['services'] as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> restartService(String serviceName) =>
+      _post('/services/$serviceName/restart');
+
   // ---- Filesystem ----
 
   Future<Map<String, dynamic>> listDir(String path) => _get('/fs/list', {'path': path});
@@ -208,6 +218,32 @@ class ApiClient {
   Future<Map<String, dynamic>> getKbdBacklight() => _get('/keyboard/backlight');
 
   Future<Map<String, dynamic>> setKbdBacklight(int level) => _post('/keyboard/backlight', {'level': level});
+
+  // ---- Network ----
+
+  Future<Map<String, dynamic>> getWifiNetworks() => _get('/network/wifi');
+
+  Future<Map<String, dynamic>> connectWifi(String ssid) => _post('/network/wifi/connect', {'ssid': ssid});
+
+  Future<Map<String, dynamic>> getBluetoothDevices() => _get('/network/bluetooth');
+
+  Future<Map<String, dynamic>> connectBluetooth(String mac) => _post('/network/bluetooth/connect', {'mac': mac});
+
+  Future<Map<String, dynamic>> getWifiRadio() => _get('/network/wifi/power');
+
+  Future<Map<String, dynamic>> setWifiRadio(bool enabled) => _post('/network/wifi/power', {'enabled': enabled});
+
+  Future<Map<String, dynamic>> disconnectWifi() => _post('/network/wifi/disconnect');
+
+  Future<Map<String, dynamic>> getBluetoothRadio() => _get('/network/bluetooth/power');
+
+  Future<Map<String, dynamic>> setBluetoothRadio(bool enabled) => _post('/network/bluetooth/power', {'enabled': enabled});
+
+  Future<Map<String, dynamic>> disconnectBluetooth(String mac) => _post('/network/bluetooth/disconnect', {'mac': mac});
+
+  Future<Map<String, dynamic>> getLockStatus() => _get('/power/lock-status');
+
+  Future<Map<String, dynamic>> unlockScreen(String password) => _post('/power/unlock', {'password': password});
 
   /// Builds the request for the most recently captured screenshot.
   /// Includes a cache-busting timestamp so repeated captures don't get stuck

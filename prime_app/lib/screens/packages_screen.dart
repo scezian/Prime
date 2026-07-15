@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
+import '../services/biometric_auth.dart';
 import '../theme/prime_theme.dart';
 
 enum _ViewMode { installed, search }
@@ -108,6 +109,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
     );
     if (confirmed != true || !mounted) return;
 
+    final authorized = await BiometricAuth.confirm('Install $name');
+    if (!authorized || !mounted) return;
+
     setState(() {
       _busy = true;
       _busyPackage = name;
@@ -149,6 +153,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+
+    final authorized = await BiometricAuth.confirm('Uninstall $name');
+    if (!authorized || !mounted) return;
 
     setState(() {
       _busy = true;

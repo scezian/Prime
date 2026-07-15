@@ -14,6 +14,11 @@ class PrimeColors {
   static const mutedForeground = Color(0xFF4D6A85);
   static const destructive = Color(0xFFEF4444); // red - delete/uninstall
   static const warning = Color(0xFFF59E0B); // amber - dirty/AUR/caution
+  static const cpuAccent = Color(0xFF38BDF8); // cyan - cpu stat
+  static const memAccent = Color(0xFFF472B6); // pink - memory stat
+  static const netAccent = Color(0xFF818CF8); // violet - network stat
+  static const filesAccent = Color(0xFF4F8EF7); // blue - files action
+  static const packagesAccent = Color(0xFFC084FC); // purple - packages action
   static const border = Color(0x12FFFFFF); // rgba(255,255,255,0.07)
   static const inputBackground = Color(0xFF111B28);
 }

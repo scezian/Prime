@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
+import '../services/biometric_auth.dart';
 import '../theme/prime_theme.dart';
 
 class CommandsScreen extends StatefulWidget {
@@ -13,13 +14,12 @@ class CommandsScreen extends StatefulWidget {
 
 class _CommandsScreenState extends State<CommandsScreen> {
   List<dynamic>? _commands;
+  List<dynamic>? _services;
   String? _error;
 
-  static const _categoryOrder = ['info', 'service', 'power', 'utility'];
+  static const _categoryOrder = ['info', 'utility'];
   static const _categoryLabels = {
     'info': 'INFO',
-    'service': 'SERVICES',
-    'power': 'POWER',
     'utility': 'UTILITY',
   };
 
@@ -32,9 +32,11 @@ class _CommandsScreenState extends State<CommandsScreen> {
   Future<void> _load() async {
     try {
       final cmds = await widget.apiClient.listCommands();
+      final svcs = await widget.apiClient.listServices();
       if (!mounted) return;
       setState(() {
         _commands = cmds;
+        _services = svcs;
         _error = null;
       });
     } catch (e) {
@@ -53,16 +55,16 @@ class _CommandsScreenState extends State<CommandsScreen> {
                 child: Text(_error!, style: PrimeTheme.mono(color: PrimeColors.destructive, fontSize: 12)),
               ),
             )
-          : _commands == null
+          : (_commands == null || _services == null)
               ? const Center(child: CircularProgressIndicator(color: PrimeColors.primary))
               : ListView(
                   padding: const EdgeInsets.all(16),
-                  children: _buildGroupedList(),
+                  children: _buildSections(),
                 ),
     );
   }
 
-  List<Widget> _buildGroupedList() {
+  List<Widget> _buildSections() {
     final byCategory = <String, List<dynamic>>{};
     for (final c in _commands!) {
       final cat = (c['category'] as String?) ?? 'utility';
@@ -70,16 +72,42 @@ class _CommandsScreenState extends State<CommandsScreen> {
     }
 
     final widgets = <Widget>[];
-    for (final cat in _categoryOrder) {
-      final items = byCategory[cat];
-      if (items == null || items.isEmpty) continue;
+
+    void addHeader(String label) {
       widgets.add(Padding(
         padding: EdgeInsets.only(top: widgets.isEmpty ? 0 : 16, bottom: 8),
-        child: Text(
-          _categoryLabels[cat] ?? cat.toUpperCase(),
-          style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2),
-        ),
+        child: Text(label, style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
       ));
+    }
+
+    // INFO
+    final infoItems = byCategory['info'];
+    if (infoItems != null && infoItems.isNotEmpty) {
+      addHeader('INFO');
+      for (final c in infoItems) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _CommandTile(apiClient: widget.apiClient, command: c as Map<String, dynamic>),
+        ));
+      }
+    }
+
+    // SERVICES — dynamic, driven by app/config.py's SERVICES_TO_CHECK on the daemon
+    if (_services!.isNotEmpty) {
+      addHeader('SERVICES');
+      for (final s in _services!) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _ServiceTile(apiClient: widget.apiClient, service: s as Map<String, dynamic>),
+        ));
+      }
+    }
+
+    // UTILITY
+    for (final cat in ['utility']) {
+      final items = byCategory[cat];
+      if (items == null || items.isEmpty) continue;
+      addHeader(_categoryLabels[cat] ?? cat.toUpperCase());
       for (final c in items) {
         widgets.add(Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -87,13 +115,14 @@ class _CommandsScreenState extends State<CommandsScreen> {
         ));
       }
     }
+
     return widgets;
   }
 }
 
 /// Fire-and-forget commands that may drop the connection before the daemon
 /// gets to respond (the daemon itself restarts, or the machine sleeps/exits).
-const _fireCommandIds = {'reboot', 'suspend', 'logout', 'restart-prime-daemon'};
+const _fireCommandIds = {'reboot', 'suspend', 'logout'};
 
 class _CommandTile extends StatefulWidget {
   final ApiClient apiClient;
@@ -120,6 +149,16 @@ class _CommandTileState extends State<_CommandTile> {
       setState(() => _confirm = true);
       return;
     }
+
+    if (_needsConfirm) {
+      final name = widget.command['name'] as String;
+      final authorized = await BiometricAuth.confirm('Confirm: $name');
+      if (!authorized) {
+        if (mounted) setState(() => _confirm = false);
+        return;
+      }
+    }
+
     setState(() {
       _loading = true;
       _confirm = false;
@@ -141,7 +180,7 @@ class _CommandTileState extends State<_CommandTile> {
       setState(() {
         _loading = false;
         if (_fireCommandIds.contains(_id)) {
-          // Expected — the daemon/session may not survive long enough to respond.
+          // Expected — the session may not survive long enough to respond.
           _result = {'started': true};
           _expanded = true;
         } else {
@@ -298,7 +337,6 @@ class _CommandTileState extends State<_CommandTile> {
       return Text(text, style: PrimeTheme.mono(fontSize: 11, color: PrimeColors.mutedForeground));
     }
 
-    // Generic fallback — pretty-print whatever came back.
     const encoder = JsonEncoder.withIndent('  ');
     String pretty;
     try {
@@ -307,5 +345,156 @@ class _CommandTileState extends State<_CommandTile> {
       pretty = result.toString();
     }
     return Text(pretty, style: PrimeTheme.mono(fontSize: 11, color: PrimeColors.mutedForeground));
+  }
+}
+
+/// A single systemd --user service, sourced dynamically from GET /services
+/// (which itself just reflects config.py's SERVICES_TO_CHECK on the daemon).
+/// Restart always requires confirm + biometric, same as other disruptive
+/// actions in this screen.
+class _ServiceTile extends StatefulWidget {
+  final ApiClient apiClient;
+  final Map<String, dynamic> service;
+  const _ServiceTile({required this.apiClient, required this.service});
+
+  @override
+  State<_ServiceTile> createState() => _ServiceTileState();
+}
+
+class _ServiceTileState extends State<_ServiceTile> {
+  bool _confirm = false;
+  bool _loading = false;
+  String? _error;
+  String? _lastActionResult;
+
+  String get _name => widget.service['name'] as String;
+  String get _status => widget.service['status'] as String;
+
+  Color get _statusColor {
+    switch (_status) {
+      case 'active':
+        return PrimeColors.primary;
+      case 'failed':
+        return PrimeColors.destructive;
+      default:
+        return PrimeColors.mutedForeground;
+    }
+  }
+
+  Future<void> _handleTap() async {
+    if (!_confirm) {
+      setState(() => _confirm = true);
+      return;
+    }
+
+    final authorized = await BiometricAuth.confirm('Restart $_name');
+    if (!authorized) {
+      if (mounted) setState(() => _confirm = false);
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _confirm = false;
+      _error = null;
+      _lastActionResult = null;
+    });
+    try {
+      await widget.apiClient.restartService(_name);
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _lastActionResult = 'restarted';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        if (_name == 'prime-daemon.service') {
+          // Restarting the daemon itself drops the connection — expected.
+          _lastActionResult = 'restarted';
+        } else {
+          _error = e.toString();
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: _confirm ? PrimeColors.destructive.withValues(alpha: 0.08) : PrimeColors.card,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: PrimeColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: _handleTap,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _confirm ? 'confirm restart: $_name?' : _name,
+                          style: PrimeTheme.mono(
+                            fontSize: 13,
+                            color: _confirm ? PrimeColors.destructive : PrimeColors.foreground,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _status,
+                          style: PrimeTheme.mono(fontSize: 10, color: _statusColor),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_loading)
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground),
+                    )
+                  else if (_confirm)
+                    InkWell(
+                      onTap: () => setState(() => _confirm = false),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.close, size: 13, color: PrimeColors.mutedForeground),
+                      ),
+                    )
+                  else
+                    const Icon(Icons.restart_alt, size: 15, color: PrimeColors.mutedForeground),
+                ],
+              ),
+            ),
+          ),
+          if (_error != null || _lastActionResult != null)
+            Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: PrimeColors.border)),
+                color: Color(0xFF06101A),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Text(
+                _error ?? _lastActionResult!,
+                style: PrimeTheme.mono(
+                  fontSize: 11,
+                  color: _error != null ? PrimeColors.destructive : PrimeColors.primary,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
