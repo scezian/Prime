@@ -25,6 +25,11 @@ ALLOWLISTED_ROOTS = [
     Path.home() / ".config",
 ]
 
+# systemd --user services exposed for status/restart via the app's dynamic
+# service management. Add a new project's service name here and it appears
+# in the app automatically — no new daemon code needed.
+SERVICES_TO_CHECK = ["prime-daemon.service", "hyprpanel.service"]
+
 
 def get_or_create_token() -> str:
     """Return the auth token, generating one on first run."""

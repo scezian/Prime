@@ -14,13 +14,17 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.auth import verify_token
-from app.commands import COMMANDS, SCREENSHOT_CACHE
+from app.commands import COMMANDS, SCREENSHOT_CACHE, is_screen_locked, unlock_screen
 from app.config import ALLOWLISTED_ROOTS
-from app import filesystem, packages, media
+from app import filesystem, packages, media, services, network
+import psutil
 
 app = FastAPI(title="Prime Daemon")
 
 _BOOT_TIME = time.time()
+psutil.cpu_percent(interval=None)  # prime the internal sample window
+_prev_net = psutil.net_io_counters()
+_prev_net_time = time.time()
 
 
 @app.get("/health")
@@ -31,12 +35,35 @@ def health():
 
 @app.get("/status", dependencies=[Depends(verify_token)])
 def status():
+    global _prev_net, _prev_net_time
+
     disk = shutil.disk_usage("/")
     uptime_seconds = int(time.time() - _BOOT_TIME)
+
+    cpu_percent = psutil.cpu_percent(interval=None)
+    mem = psutil.virtual_memory()
+
+    now = time.time()
+    current_net = psutil.net_io_counters()
+    dt = max(now - _prev_net_time, 0.001)
+    download_kbps = (current_net.bytes_recv - _prev_net.bytes_recv) / dt / 1024
+    upload_kbps = (current_net.bytes_sent - _prev_net.bytes_sent) / dt / 1024
+    _prev_net = current_net
+    _prev_net_time = now
 
     return {
         "hostname": socket.gethostname(),
         "daemon_uptime": str(timedelta(seconds=uptime_seconds)),
+        "cpu_percent": round(cpu_percent, 1),
+        "memory": {
+            "used_gb": round(mem.used / 1e9, 1),
+            "total_gb": round(mem.total / 1e9, 1),
+            "percent": round(mem.percent, 1),
+        },
+        "network": {
+            "download_kbps": round(download_kbps, 1),
+            "upload_kbps": round(upload_kbps, 1),
+        },
         "disk": {
             "total_gb": round(disk.total / 1e9, 1),
             "used_gb": round(disk.used / 1e9, 1),
@@ -76,11 +103,41 @@ def run_command(command_id: str):
     return {"command_id": command_id, "result": result}
 
 
+@app.get("/power/lock-status", dependencies=[Depends(verify_token)])
+def power_lock_status():
+    return {"locked": is_screen_locked()}
+
+
+class UnlockBody(BaseModel):
+    password: str
+
+
+@app.post("/power/unlock", dependencies=[Depends(verify_token)])
+def power_unlock(body: UnlockBody):
+    try:
+        return unlock_screen(body.password)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/commands/screenshot/image", dependencies=[Depends(verify_token)])
 def commands_screenshot_image():
     if not SCREENSHOT_CACHE.exists():
         raise HTTPException(status_code=404, detail="No screenshot captured yet — run the Screenshot command first")
     return FileResponse(SCREENSHOT_CACHE)
+
+
+@app.get("/services", dependencies=[Depends(verify_token)])
+def services_list():
+    return services.list_services()
+
+
+@app.post("/services/{service_name}/restart", dependencies=[Depends(verify_token)])
+def services_restart(service_name: str):
+    try:
+        return services.restart_service(service_name)
+    except services.ServiceError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ---- Filesystem ----
@@ -291,6 +348,102 @@ def display_get_brightness():
     try:
         return media.get_brightness()
     except media.ControlError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/network/wifi", dependencies=[Depends(verify_token)])
+def network_wifi_list():
+    try:
+        return network.list_wifi_networks()
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class WifiConnectBody(BaseModel):
+    ssid: str
+
+
+@app.post("/network/wifi/connect", dependencies=[Depends(verify_token)])
+def network_wifi_connect(body: WifiConnectBody):
+    try:
+        return network.connect_wifi(body.ssid)
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/network/bluetooth", dependencies=[Depends(verify_token)])
+def network_bluetooth_list():
+    try:
+        return network.list_bluetooth_devices()
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class BluetoothConnectBody(BaseModel):
+    mac: str
+
+
+@app.post("/network/bluetooth/connect", dependencies=[Depends(verify_token)])
+def network_bluetooth_connect(body: BluetoothConnectBody):
+    try:
+        return network.connect_bluetooth(body.mac)
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RadioPowerBody(BaseModel):
+    enabled: bool
+
+
+@app.get("/network/wifi/power", dependencies=[Depends(verify_token)])
+def network_wifi_power_get():
+    try:
+        return network.get_wifi_radio()
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/network/wifi/power", dependencies=[Depends(verify_token)])
+def network_wifi_power_set(body: RadioPowerBody):
+    try:
+        return network.set_wifi_radio(body.enabled)
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/network/wifi/disconnect", dependencies=[Depends(verify_token)])
+def network_wifi_disconnect():
+    try:
+        return network.disconnect_wifi()
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/network/bluetooth/power", dependencies=[Depends(verify_token)])
+def network_bluetooth_power_get():
+    try:
+        return network.get_bluetooth_radio()
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/network/bluetooth/power", dependencies=[Depends(verify_token)])
+def network_bluetooth_power_set(body: RadioPowerBody):
+    try:
+        return network.set_bluetooth_radio(body.enabled)
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class BluetoothDisconnectBody(BaseModel):
+    mac: str
+
+
+@app.post("/network/bluetooth/disconnect", dependencies=[Depends(verify_token)])
+def network_bluetooth_disconnect(body: BluetoothDisconnectBody):
+    try:
+        return network.disconnect_bluetooth(body.mac)
+    except network.NetworkError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 

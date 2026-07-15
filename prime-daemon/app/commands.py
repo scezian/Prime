@@ -8,6 +8,7 @@ Each command is either:
   daemon itself may get killed before it can respond otherwise)
 """
 import subprocess
+import os
 from pathlib import Path
 
 PROJECTS_DIR = Path.home() / "Projects"
@@ -61,13 +62,47 @@ def run_sync(cmd: list[str], timeout: int = 20) -> dict:
     }
 
 
-def run_fire(cmd: list[str]) -> dict:
+def _find_wayland_display() -> str | None:
+    """Locate the live Wayland socket under XDG_RUNTIME_DIR.
+
+    The daemon may start via systemd lingering before (or without ever)
+    inheriting a graphical session's environment, so WAYLAND_DISPLAY can be
+    missing even while Hyprland is running. Looking the socket up at call
+    time (rather than trusting inherited env) keeps this correct regardless
+    of when the daemon started or whether Hyprland has restarted since.
+    """
+    import re
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    try:
+        for entry in sorted(Path(runtime_dir).glob("wayland-*")):
+            # Only true display sockets (e.g. "wayland-1"), not related
+            # files other tools create alongside it (e.g. "wayland-1.lock",
+            # "wayland-1-awww-daemon.sock").
+            if re.fullmatch(r"wayland-\d+", entry.name):
+                return entry.name
+    except OSError:
+        pass
+    return None
+
+
+def _wayland_env() -> dict:
+    """A copy of the current environment with WAYLAND_DISPLAY corrected/added
+    if a live socket can be found. Falls back to the inherited environment
+    unchanged if no socket is found (the command will then fail with its own
+    clear error rather than silently using a stale value)."""
+    env = os.environ.copy()
+    display = _find_wayland_display()
+    if display:
+        env["WAYLAND_DISPLAY"] = display
+    return env
+
+
+def run_fire(cmd: list[str], env: dict | None = None) -> dict:
     """Fire-and-forget — for commands that may kill the daemon (reboot/suspend)."""
-    subprocess.Popen(cmd)
+    subprocess.Popen(cmd, env=env)
     return {"started": True}
 
 
-SERVICES_TO_CHECK = ["prime-daemon.service", "hyprpanel.service"]
 TRASH_DIR = Path.home() / ".prime-trash"
 SCREENSHOT_CACHE = Path("/tmp/prime-screenshot.png")
 
@@ -81,12 +116,6 @@ def get_network_status() -> dict:
     }
 
 
-def get_service_status() -> dict:
-    results = []
-    for svc in SERVICES_TO_CHECK:
-        proc = run_sync(["systemctl", "--user", "is-active", svc], timeout=10)
-        results.append({"service": svc, "status": (proc["stdout"] or proc["stderr"]).strip()})
-    return {"services": results}
 
 
 def clear_trash() -> dict:
@@ -103,10 +132,46 @@ def clear_trash() -> dict:
     return {"cleared": count}
 
 
+def is_screen_locked() -> bool:
+    """True if a hyprlock process is currently running."""
+    proc = subprocess.run(["pgrep", "-x", "hyprlock"], capture_output=True, text=True, timeout=5)
+    return proc.returncode == 0
+
+
+def unlock_screen(password: str) -> dict:
+    """Type the password into the running hyprlock prompt and press Enter,
+    letting hyprlock's own PAM check validate it. This is not a bypass —
+    it's the same input path a physical keystroke takes."""
+    import time
+
+    if not is_screen_locked():
+        return {"unlocked": False, "note": "screen was not locked"}
+
+    env = _wayland_env()
+    try:
+        subprocess.run(["wtype", password], env=env, timeout=10, check=True)
+        subprocess.run(["wtype", "-k", "Return"], env=env, timeout=5, check=True)
+    except FileNotFoundError:
+        raise RuntimeError("wtype not found — install it (paru -S wtype) to enable remote unlock")
+    except subprocess.CalledProcessError:
+        raise RuntimeError("failed to send password to the lock screen")
+
+    time.sleep(1.2)  # give hyprlock a moment to validate and exit
+    return {"unlocked": not is_screen_locked()}
+
+
 def take_screenshot() -> dict:
-    proc = run_sync(["grim", str(SCREENSHOT_CACHE)], timeout=15)
-    if proc["returncode"] != 0:
-        raise RuntimeError(proc["stderr"] or "grim failed")
+    try:
+        proc = subprocess.run(
+            ["grim", str(SCREENSHOT_CACHE)],
+            capture_output=True, text=True, timeout=15, env=_wayland_env(),
+        )
+    except FileNotFoundError:
+        raise RuntimeError("grim not found on this system")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("grim timed out")
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "grim failed")
     return {"path": str(SCREENSHOT_CACHE)}
 
 
@@ -160,13 +225,6 @@ COMMANDS = {
         "needs_confirm": False,
         "run": lambda: run_sync(["paru", "-Qu"], timeout=30),
     },
-    "service-status": {
-        "name": "Service Status",
-        "description": "Status of key user services",
-        "category": "info",
-        "needs_confirm": False,
-        "run": lambda: get_service_status(),
-    },
     "journal-errors": {
         "name": "Recent Errors",
         "description": "Last 20 error-level journal entries",
@@ -174,26 +232,12 @@ COMMANDS = {
         "needs_confirm": False,
         "run": lambda: run_sync(["journalctl", "-p", "err", "-n", "20", "--no-pager"], timeout=15),
     },
-    "restart-prime-daemon": {
-        "name": "Restart Prime Daemon",
-        "description": "Restarts this daemon \u2014 connection will drop briefly",
-        "category": "service",
-        "needs_confirm": True,
-        "run": lambda: run_fire(["systemctl", "--user", "restart", "prime-daemon.service"]),
-    },
-    "restart-hyprpanel": {
-        "name": "Restart HyprPanel",
-        "description": "Restarts the Hyprland system tray panel",
-        "category": "service",
-        "needs_confirm": True,
-        "run": lambda: run_sync(["systemctl", "--user", "restart", "hyprpanel.service"]),
-    },
     "lock-screen": {
         "name": "Lock Screen",
         "description": "Lock the laptop screen",
         "category": "power",
         "needs_confirm": False,
-        "run": lambda: run_fire(["hyprlock"]),
+        "run": lambda: run_fire(["hyprlock"], env=_wayland_env()),
     },
     "suspend": {
         "name": "Suspend",
@@ -215,6 +259,13 @@ COMMANDS = {
         "category": "power",
         "needs_confirm": True,
         "run": lambda: run_fire(["systemctl", "reboot"]),
+    },
+    "shutdown": {
+        "name": "Shutdown",
+        "description": "Power off the laptop",
+        "category": "power",
+        "needs_confirm": True,
+        "run": lambda: run_fire(["systemctl", "poweroff"]),
     },
     "clear-trash": {
         "name": "Clear Trash",

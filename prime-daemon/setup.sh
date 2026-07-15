@@ -80,7 +80,7 @@ else
 fi
 
 echo "[prime] Checking for daemon runtime CLI tools..."
-PRIME_PACMAN_DEPS="brightnessctl playerctl pamixer grim lm_sensors hyprlock"
+PRIME_PACMAN_DEPS="brightnessctl playerctl pamixer grim lm_sensors hyprlock wtype mpv-mpris"
 MISSING_DEPS=""
 for pkg in $PRIME_PACMAN_DEPS; do
     if ! pacman -Qi "$pkg" &>/dev/null; then
@@ -199,7 +199,7 @@ flutter doctor -v
 # hunting through past conversation history for what to add.
 
 PRIME_APP_DIR="$HOME/Projects/prime/prime_app"
-FLUTTER_PACKAGES="http shared_preferences google_fonts file_picker path_provider"
+FLUTTER_PACKAGES="http shared_preferences google_fonts file_picker path_provider local_auth flutter_secure_storage"
 
 if [ -d "$PRIME_APP_DIR" ]; then
     echo ""
