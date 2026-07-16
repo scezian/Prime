@@ -3,21 +3,20 @@ import 'package:local_auth/local_auth.dart';
 /// Gates sensitive/destructive actions behind the device's fingerprint,
 /// face unlock, or PIN/pattern (whichever the device has set up).
 ///
-/// Design choice: if the device has no authentication method configured at
-/// all (isDeviceSupported() == false), or if the plugin itself throws an
-/// unexpected platform error, this fails OPEN — the action proceeds rather
-/// than being permanently blocked. The gate only adds a layer on top of the
-/// existing tap-to-confirm flow; a broken/unavailable auth plugin shouldn't
-/// brick core app functionality. If the user is actually prompted and
-/// cancels or fails, that correctly fails CLOSED (action does not proceed).
+/// Fails CLOSED: if the device has no authentication method configured
+/// (isDeviceSupported() == false), or if the plugin throws an unexpected
+/// platform error, the action is blocked rather than allowed through.
+/// A broken/unavailable auth plugin should not silently let destructive
+/// actions bypass confirmation. If the user is prompted and cancels or
+/// fails, that also correctly fails CLOSED (action does not proceed).
 class BiometricAuth {
   static final LocalAuthentication _auth = LocalAuthentication();
 
-  /// Returns true if the action should proceed.
+  /// Returns true only if the user actually authenticated successfully.
   static Future<bool> confirm(String reason) async {
     try {
       final supported = await _auth.isDeviceSupported();
-      if (!supported) return true;
+      if (!supported) return false;
 
       return await _auth.authenticate(
         localizedReason: reason,
@@ -25,7 +24,7 @@ class BiometricAuth {
         persistAcrossBackgrounding: true, // survives the app briefly backgrounding mid-prompt
       );
     } catch (_) {
-      return true;
+      return false;
     }
   }
 }

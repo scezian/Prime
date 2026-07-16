@@ -13,6 +13,9 @@ from pathlib import Path
 
 PROJECTS_DIR = Path.home() / "Projects"
 
+MUSIC_DIR = Path.home() / "Music"
+NOCTURNE_TRACK = MUSIC_DIR / "Leave It All To Sink Into Heavy Rain And Thunderstorms - Relax And Sleep In Cozy Car.m4a"
+
 
 def scan_git_status() -> dict:
     """Walk ~/Projects, report uncommitted changes per repo."""
@@ -175,6 +178,30 @@ def take_screenshot() -> dict:
     return {"path": str(SCREENSHOT_CACHE)}
 
 
+def run_nocturne() -> dict:
+    """Play the sleep-audio track, dim the screen to minimum, and lock."""
+    env = _wayland_env()
+    result = {"mpv": False, "brightness": False, "locked": False}
+
+    if NOCTURNE_TRACK.exists():
+        subprocess.Popen(
+            ["mpv", "--script=/usr/lib/mpv-mpris/mpris.so", str(NOCTURNE_TRACK)],
+            env=env,
+        )
+        result["mpv"] = True
+
+    try:
+        subprocess.run(["brightnessctl", "set", "1"], capture_output=True, text=True, timeout=5)
+        result["brightness"] = True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    subprocess.Popen(["hyprlock"], env=env)
+    result["locked"] = True
+
+    return result
+
+
 COMMANDS = {
     "git-status": {
         "name": "Git Status (all repos)",
@@ -280,5 +307,12 @@ COMMANDS = {
         "category": "utility",
         "needs_confirm": False,
         "run": lambda: take_screenshot(),
+    },
+    "nocturne": {
+        "name": "Nocturne",
+        "description": "Play sleep audio, dim to minimum, and lock",
+        "category": "utility",
+        "needs_confirm": False,
+        "run": lambda: run_nocturne(),
     },
 }

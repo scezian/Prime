@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
+import '../services/app_lock.dart';
 import '../theme/prime_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -19,11 +20,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _testing = false;
   bool? _testOk; // null = not tested yet
 
+  bool _lockEnabled = false;
+  bool _biometricEnabled = false;
+  bool _biometricHardwareAvailable = false;
+  bool _lockLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _hostController.text = widget.apiClient.host ?? '';
     _tokenController.text = widget.apiClient.token ?? '';
+    _loadLockState();
+  }
+
+  Future<void> _loadLockState() async {
+    final enabled = await AppLock.isEnabled();
+    final biometricPref = await AppLock.biometricPreferred();
+    final hardware = await AppLock.deviceHasBiometrics();
+    if (!mounted) return;
+    setState(() {
+      _lockEnabled = enabled;
+      _biometricEnabled = biometricPref;
+      _biometricHardwareAvailable = hardware;
+      _lockLoaded = true;
+    });
   }
 
   @override
@@ -60,6 +80,147 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _testing = false;
       _testOk = ok;
     });
+  }
+
+  Future<void> _onToggleLock(bool value) async {
+    if (value) {
+      final pin = await _promptSetPin();
+      if (pin == null) return; // cancelled
+      await AppLock.enable(pin);
+      if (_biometricHardwareAvailable) {
+        final useBiometric = await _promptUseBiometric();
+        await AppLock.setBiometricPreferred(useBiometric);
+        setState(() => _biometricEnabled = useBiometric);
+      }
+      setState(() => _lockEnabled = true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('App lock enabled')));
+      }
+    } else {
+      final confirmedPin = await _promptVerifyPin('Enter your PIN to turn off App Lock');
+      if (confirmedPin != true) return;
+      await AppLock.disable();
+      setState(() {
+        _lockEnabled = false;
+        _biometricEnabled = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('App lock disabled')));
+      }
+    }
+  }
+
+  Future<void> _onToggleBiometric(bool value) async {
+    await AppLock.setBiometricPreferred(value);
+    setState(() => _biometricEnabled = value);
+  }
+
+  Future<void> _onChangePin() async {
+    final verified = await _promptVerifyPin('Enter your current PIN');
+    if (verified != true) return;
+    final newPin = await _promptSetPin();
+    if (newPin == null) return;
+    await AppLock.changePin(newPin);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN updated')));
+    }
+  }
+
+  /// Two-step "enter PIN" + "confirm PIN" dialog. Returns the new PIN, or
+  /// null if cancelled / the two entries didn't match.
+  Future<String?> _promptSetPin() async {
+    final first = await _pinDialog('Set a PIN', 'Choose a 4-8 digit PIN');
+    if (first == null || first.length < 4) {
+      if (first != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN must be at least 4 digits')));
+      }
+      return null;
+    }
+    final second = await _pinDialog('Confirm PIN', 'Re-enter your PIN');
+    if (second != first) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PINs did not match')));
+      }
+      return null;
+    }
+    return first;
+  }
+
+  /// Prompts for the existing PIN and checks it against AppLock. Returns
+  /// true if correct, false if wrong, null if cancelled.
+  Future<bool?> _promptVerifyPin(String message) async {
+    final entered = await _pinDialog('Enter PIN', message);
+    if (entered == null) return null;
+    final ok = await AppLock.verifyPin(entered);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Incorrect PIN')));
+    }
+    return ok;
+  }
+
+  Future<bool> _promptUseBiometric() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: PrimeColors.card,
+        title: Text('Use fingerprint too?', style: PrimeTheme.text(fontSize: 15, fontWeight: FontWeight.w700)),
+        content: Text(
+          'You can unlock with fingerprint instead of typing your PIN each time.',
+          style: PrimeTheme.text(fontSize: 12, color: PrimeColors.mutedForeground),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('No thanks', style: PrimeTheme.text(fontSize: 12, color: PrimeColors.mutedForeground)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: PrimeColors.primary),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Enable', style: PrimeTheme.text(fontSize: 12, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<String?> _pinDialog(String title, String subtitle) async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: PrimeColors.card,
+        title: Text(title, style: PrimeTheme.text(fontSize: 15, fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(subtitle, style: PrimeTheme.text(fontSize: 12, color: PrimeColors.mutedForeground)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 8,
+              style: PrimeTheme.text(fontSize: 16, letterSpacing: 4),
+              decoration: const InputDecoration(counterText: '', border: OutlineInputBorder()),
+              onSubmitted: (v) => Navigator.of(dialogContext).pop(v),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(null),
+            child: Text('Cancel', style: PrimeTheme.text(fontSize: 12, color: PrimeColors.mutedForeground)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: Text('OK', style: PrimeTheme.text(fontSize: 12, color: PrimeColors.primary, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -161,6 +322,145 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_lockLoaded)
+            _AppLockCard(
+              enabled: _lockEnabled,
+              biometricEnabled: _biometricEnabled,
+              biometricHardwareAvailable: _biometricHardwareAvailable,
+              onToggleLock: _onToggleLock,
+              onToggleBiometric: _onToggleBiometric,
+              onChangePin: _onChangePin,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AppLockCard extends StatelessWidget {
+  final bool enabled;
+  final bool biometricEnabled;
+  final bool biometricHardwareAvailable;
+  final ValueChanged<bool> onToggleLock;
+  final ValueChanged<bool> onToggleBiometric;
+  final VoidCallback onChangePin;
+
+  const _AppLockCard({
+    required this.enabled,
+    required this.biometricEnabled,
+    required this.biometricHardwareAvailable,
+    required this.onToggleLock,
+    required this.onToggleBiometric,
+    required this.onChangePin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: PrimeColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: PrimeColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: PrimeColors.border)),
+            ),
+            child: Text(
+              'APP LOCK',
+              style: PrimeTheme.text(fontSize: 11, fontWeight: FontWeight.w700, color: PrimeColors.prime400, letterSpacing: 1.8),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        gradient: PrimeGradients.tileA,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.lock_outline, size: 18, color: Colors.white),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Require PIN to open', style: PrimeTheme.text(fontSize: 13, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 2),
+                          Text(
+                            "Locks Prime whenever it's backgrounded",
+                            style: PrimeTheme.text(fontSize: 11, color: PrimeColors.mutedForeground),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: enabled,
+                      activeThumbColor: PrimeColors.primary,
+                      onChanged: onToggleLock,
+                    ),
+                  ],
+                ),
+                if (enabled && biometricHardwareAvailable) ...[
+                  const Divider(color: PrimeColors.border, height: 28),
+                  Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          gradient: PrimeGradients.tileB,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.fingerprint, size: 18, color: Colors.white),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text('Use fingerprint', style: PrimeTheme.text(fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                      Switch(
+                        value: biometricEnabled,
+                        activeThumbColor: PrimeColors.primary,
+                        onChanged: onToggleBiometric,
+                      ),
+                    ],
+                  ),
+                ],
+                if (enabled) ...[
+                  const Divider(color: PrimeColors.border, height: 28),
+                  InkWell(
+                    onTap: onChangePin,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.password, size: 16, color: PrimeColors.mutedForeground),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text('Change PIN', style: PrimeTheme.text(fontSize: 13, fontWeight: FontWeight.w600)),
+                          ),
+                          const Icon(Icons.chevron_right, size: 18, color: PrimeColors.mutedForeground),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -5,6 +5,7 @@ import '../services/secure_credentials.dart';
 import '../services/api_client.dart';
 import '../theme/prime_theme.dart';
 import '../widgets/pulse_dot.dart';
+import '../widgets/ambient_background.dart';
 import 'control_screen.dart';
 import 'files_screen.dart';
 import 'packages_screen.dart';
@@ -92,6 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
         label: 'Control',
         subtitle: 'media · system',
         accent: PrimeColors.cpuAccent,
+        gradient: PrimeGradients.tileA,
         onTap: () => _open(ControlScreen(apiClient: widget.apiClient)),
       ),
       _ActionItem(
@@ -103,6 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
             : null,
         statColor: PrimeColors.filesAccent,
         accent: PrimeColors.filesAccent,
+        gradient: PrimeGradients.tileB,
         onTap: () => _open(FilesScreen(apiClient: widget.apiClient)),
       ),
       _ActionItem(
@@ -110,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
         label: 'Packages',
         subtitle: 'pacman / paru',
         accent: PrimeColors.packagesAccent,
+        gradient: PrimeGradients.tileA,
         onTap: () => _open(PackagesScreen(apiClient: widget.apiClient)),
       ),
       _ActionItem(
@@ -117,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
         label: 'Commands',
         subtitle: '17 actions',
         accent: PrimeColors.warning,
+        gradient: PrimeGradients.tileB,
         onTap: () => _open(CommandsScreen(apiClient: widget.apiClient)),
       ),
       _ActionItem(
@@ -124,8 +129,9 @@ class _HomeScreenState extends State<HomeScreen> {
         label: 'Settings',
         subtitle: 'tailscale · auth',
         stat: widget.apiClient.host,
-        statColor: PrimeColors.destructive,
+        statColor: Colors.white,
         accent: PrimeColors.destructive,
+        gradient: PrimeGradients.tileA,
         onTap: () => _open(SettingsScreen(
           apiClient: widget.apiClient,
           onSaved: () => Navigator.pop(context),
@@ -133,14 +139,36 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Prime')),
-      body: RefreshIndicator(
+    return AmbientBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          automaticallyImplyLeading: false,
+          titleSpacing: 20,
+          title: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  gradient: PrimeGradients.header,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: PrimeShadows.tile,
+                ),
+                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Text('Prime'),
+            ],
+          ),
+        ),
+        body: RefreshIndicator(
         color: PrimeColors.primary,
         backgroundColor: PrimeColors.card,
         onRefresh: _refresh,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
           children: [
             if (_error != null) _ErrorBanner(message: _error!),
             if (_loading && _status == null)
@@ -150,8 +178,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             if (_status != null) ...[
               // PRIME_OVERVIEW_CARD_REMOVED
-              Text('POWER', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
-              const SizedBox(height: 8),
+              Text('POWER', style: PrimeTheme.text(fontSize: 11, fontWeight: FontWeight.w700, color: PrimeColors.prime400, letterSpacing: 1.8)),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
@@ -200,28 +228,31 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ],
+            const SizedBox(height: 22),
             Text(
-              'ACTIONS',
-              style: PrimeTheme.mono(
-                fontSize: 9,
-                color: PrimeColors.mutedForeground,
-                letterSpacing: 2,
+              'MANAGE',
+              style: PrimeTheme.text(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: PrimeColors.prime400,
+                letterSpacing: 1.8,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 1.25,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.02,
               children: actions.take(4).map((a) => _ActionTile(item: a)).toList(),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             _ActionTile(item: actions.last, fullWidth: true),
           ],
         ),
+      ),
       ),
     );
   }
@@ -234,6 +265,7 @@ class _ActionItem {
   final String? stat;
   final Color? statColor;
   final Color accent;
+  final Gradient gradient;
   final VoidCallback onTap;
   const _ActionItem({
     required this.icon,
@@ -242,6 +274,7 @@ class _ActionItem {
     this.stat,
     this.statColor,
     required this.accent,
+    required this.gradient,
     required this.onTap,
   });
 }
@@ -272,37 +305,83 @@ class _ActionTileState extends State<_ActionTile> {
         curve: Curves.easeOut,
         child: Container(
           width: widget.fullWidth ? double.infinity : null,
-          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: PrimeColors.card,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: item.accent.withValues(alpha: 0.35)),
+            gradient: item.gradient,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: PrimeShadows.tile,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
             children: [
-              Icon(item.icon, size: 22, color: item.accent),
-              const SizedBox(height: 10),
-              Text(
-                item.label,
-                overflow: TextOverflow.ellipsis,
-                style: PrimeTheme.mono(fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                item.subtitle,
-                overflow: TextOverflow.ellipsis,
-                style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground),
-              ),
-              if (item.stat != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  item.stat!,
-                  overflow: TextOverflow.ellipsis,
-                  style: PrimeTheme.mono(fontSize: 11, color: item.statColor ?? item.accent),
+              // Corner glow blobs, matching the bolt.new FeatureTiles decoration.
+              Positioned(
+                right: -28,
+                top: -28,
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)),
                 ),
-              ],
+              ),
+              Positioned(
+                left: -24,
+                bottom: -36,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.05)),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(item.icon, size: 22, color: Colors.white),
+                        ),
+                        if (item.stat != null)
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                item.stat!,
+                                overflow: TextOverflow.ellipsis,
+                                style: PrimeTheme.text(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      item.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: PrimeTheme.text(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.subtitle,
+                      overflow: TextOverflow.ellipsis,
+                      style: PrimeTheme.text(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.72)),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -558,30 +637,36 @@ class _PowerActionButtonState extends State<_PowerActionButton> {
 
   @override
   Widget build(BuildContext context) {
+    final bg = _confirm ? const Color(0xFFB91C1C) : PrimeColors.destructive;
     return InkWell(
       onTap: _loading ? null : _handleTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         decoration: BoxDecoration(
-          color: _confirm ? PrimeColors.destructive.withValues(alpha: 0.08) : PrimeColors.card,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: PrimeColors.destructive.withValues(alpha: 0.4)),
+          color: bg,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: bg.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))],
         ),
-        child: Column(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (_loading)
               const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.destructive),
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
               )
             else
-              Icon(widget.icon, size: 18, color: PrimeColors.destructive),
-            const SizedBox(height: 6),
-            Text(
-              _confirm ? 'confirm?' : widget.label,
-              style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.destructive),
+              Icon(widget.icon, size: 17, color: Colors.white),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                _confirm ? 'Confirm?' : widget.label,
+                overflow: TextOverflow.ellipsis,
+                style: PrimeTheme.text(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -738,30 +823,36 @@ class _LockToggleButtonState extends State<_LockToggleButton> {
     final icon = isLocked ? Icons.lock_open : Icons.lock_outline;
     final label = isLocked ? 'Unlock' : 'Lock';
 
+    final bg = _confirm ? const Color(0xFFB91C1C) : PrimeColors.destructive;
     return InkWell(
       onTap: _loading ? null : _handleTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
         decoration: BoxDecoration(
-          color: _confirm ? PrimeColors.destructive.withValues(alpha: 0.08) : PrimeColors.card,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: PrimeColors.destructive.withValues(alpha: 0.4)),
+          color: bg,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: bg.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))],
         ),
-        child: Column(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (_loading)
               const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.destructive),
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
               )
             else
-              Icon(icon, size: 18, color: PrimeColors.destructive),
-            const SizedBox(height: 6),
-            Text(
-              _confirm ? 'confirm?' : label,
-              style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.destructive),
+              Icon(icon, size: 17, color: Colors.white),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                _confirm ? 'Confirm?' : label,
+                overflow: TextOverflow.ellipsis,
+                style: PrimeTheme.text(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+              ),
             ),
           ],
         ),

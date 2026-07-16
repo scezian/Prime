@@ -2,6 +2,23 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# sudo_auth_guard_marker: authenticate sudo explicitly, up front, before any
+# scripted logic runs. Downstream steps use `if ! sudo <cmd>` guards where a
+# failed *command* and a failed *authentication* both look like "false" —
+# under a pam_faillock lockout this silently misreads every step as "not
+# needed yet" and cascades through the whole script without actually doing
+# anything privileged, instead of stopping. Caching a valid ticket here
+# up front (and failing loudly if that's not possible) avoids that ambiguity
+# for the rest of the run.
+echo "[prime] Checking sudo access..."
+if ! sudo -v; then
+    echo "[prime] ERROR: sudo authentication failed."
+    echo "[prime] If you were just locked out (pam_faillock), wait ~10 minutes and re-run this script."
+    echo "[prime]   Check lockout status with: faillock --user \$USER"
+    exit 1
+fi
+echo "[prime] sudo OK."
+
 # ============================================================
 # Part 1: Prime daemon dependencies
 # ============================================================
@@ -80,7 +97,7 @@ else
 fi
 
 echo "[prime] Checking for daemon runtime CLI tools..."
-PRIME_PACMAN_DEPS="brightnessctl playerctl pamixer grim lm_sensors hyprlock wtype mpv-mpris"
+PRIME_PACMAN_DEPS="brightnessctl playerctl pamixer grim lm_sensors hyprlock wtype mpv-mpris bluez-utils networkmanager git"
 MISSING_DEPS=""
 for pkg in $PRIME_PACMAN_DEPS; do
     if ! pacman -Qi "$pkg" &>/dev/null; then
@@ -204,7 +221,22 @@ FLUTTER_PACKAGES="http shared_preferences google_fonts file_picker path_provider
 if [ -d "$PRIME_APP_DIR" ]; then
     echo ""
     echo "[prime-app] Ensuring Flutter package dependencies are present..."
-    (cd "$PRIME_APP_DIR" && flutter pub add $FLUTTER_PACKAGES && flutter pub get)
+    # pub_add_guard_marker: only `pub add` packages missing from pubspec.yaml —
+    # re-adding an already-present package with no version constraint can let
+    # pub's resolver silently downgrade it (bit us with file_picker 11.0.2 -> 3.0.4).
+    MISSING_PACKAGES=""
+    for pkg in $FLUTTER_PACKAGES; do
+        if ! grep -qE "^\s*${pkg}:" "$PRIME_APP_DIR/pubspec.yaml"; then
+            MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+        fi
+    done
+    if [ -n "$MISSING_PACKAGES" ]; then
+        echo "[prime-app] Adding missing packages:$MISSING_PACKAGES"
+        (cd "$PRIME_APP_DIR" && flutter pub add $MISSING_PACKAGES)
+    else
+        echo "[prime-app] All packages already declared in pubspec.yaml."
+    fi
+    (cd "$PRIME_APP_DIR" && flutter pub get)
     echo "[prime-app] Flutter packages OK: $FLUTTER_PACKAGES"
 else
     echo ""
@@ -212,6 +244,106 @@ else
     echo "[prime-app] After running 'flutter create' there, re-run this script to install: $FLUTTER_PACKAGES"
 fi
 
+# ============================================================
+# Part 4: Prime screen mirroring (wayvnc)
+# ============================================================
+
+echo ""
+echo "[prime-vnc] Checking for wayvnc..."
+if ! pacman -Qi wayvnc &>/dev/null; then
+    echo "[prime-vnc] Installing wayvnc..."
+    sudo pacman -S --needed --noconfirm wayvnc
+fi
+echo "[prime-vnc] wayvnc OK: $(which wayvnc)"
+
+WAYVNC_CONFIG_DIR="$HOME/.config/wayvnc"
+mkdir -p "$WAYVNC_CONFIG_DIR"
+
+echo "[prime-vnc] Checking for TLS cert/key..."
+if [ ! -f "$WAYVNC_CONFIG_DIR/cert.pem" ] || [ ! -f "$WAYVNC_CONFIG_DIR/key.pem" ]; then
+    echo "[prime-vnc] Generating self-signed TLS cert..."
+    openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout "$WAYVNC_CONFIG_DIR/key.pem" \
+        -out "$WAYVNC_CONFIG_DIR/cert.pem" \
+        -days 3650 \
+        -subj "/CN=prime-vnc" &>/dev/null
+    chmod 600 "$WAYVNC_CONFIG_DIR/key.pem"
+    echo "[prime-vnc] TLS cert generated (valid 10 years)."
+else
+    echo "[prime-vnc] TLS cert already exists."
+fi
+
+echo "[prime-vnc] Checking wayvnc config..."
+if [ ! -f "$WAYVNC_CONFIG_DIR/config" ] || ! grep -q "^enable_auth=true" "$WAYVNC_CONFIG_DIR/config"; then
+    if [ -f "$WAYVNC_CONFIG_DIR/config" ]; then
+        echo "[prime-vnc] WARNING: existing config has auth disabled or is otherwise non-conformant. Regenerating with auth enabled."
+    fi
+    echo "[prime-vnc] Writing wayvnc config..."
+    TAILSCALE_IP="$(tailscale ip -4)"
+    VNC_PASSWORD="$(head -c 18 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 20)"
+    cat > "$WAYVNC_CONFIG_DIR/config" << EOF
+address=$TAILSCALE_IP
+port=5900
+enable_auth=true
+username=prime
+password=$VNC_PASSWORD
+private_key_file=$WAYVNC_CONFIG_DIR/key.pem
+certificate_file=$WAYVNC_CONFIG_DIR/cert.pem
+EOF
+    chmod 600 "$WAYVNC_CONFIG_DIR/config"
+    echo "[prime-vnc] Config written. VNC username: prime  password: $VNC_PASSWORD"
+    echo "[prime-vnc] (Also saved in $WAYVNC_CONFIG_DIR/config if you need it again.)"
+else
+    echo "[prime-vnc] Config already exists, leaving as-is."
+fi
+
+echo "[prime-vnc] Installing systemd user service..."
+cp prime-vnc.service "$HOME/.config/systemd/user/"
+systemctl --user daemon-reload
+systemctl --user enable prime-vnc.service
+systemctl --user restart prime-vnc.service
+sleep 1
+if systemctl --user is-active --quiet prime-vnc.service; then
+    echo "[prime-vnc] wayvnc running on $(tailscale ip -4):5900"
+else
+    echo "[prime-vnc] WARNING: wayvnc failed to start. Check: journalctl --user -u prime-vnc.service -n 30"
+fi
+
+# ============================================================
+# Part 5: Prime screen mirroring for mobile (wayvnc, no TLS)
+# ============================================================
+echo ""
+echo "[prime-vnc-mobile] Checking wayvnc mobile config..."
+if [ ! -f "$WAYVNC_CONFIG_DIR/config-mobile" ] || grep -q "^enable_auth=true" "$WAYVNC_CONFIG_DIR/config-mobile"; then
+    if [ -f "$WAYVNC_CONFIG_DIR/config-mobile" ]; then
+        echo "[prime-vnc-mobile] WARNING: existing config-mobile has auth enabled or is otherwise non-conformant. Regenerating (mobile RFB relies on Tailscale-only auth, not wayvnc auth)."
+    fi
+    echo "[prime-vnc-mobile] Writing wayvnc mobile config..."
+    TAILSCALE_IP="$(tailscale ip -4)"
+    VNC_MOBILE_PASSWORD="$(head -c 18 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 20)"
+    cat > "$WAYVNC_CONFIG_DIR/config-mobile" << EOF
+address=$TAILSCALE_IP
+port=5902
+enable_auth=false
+username=prime
+password=$VNC_MOBILE_PASSWORD
+EOF
+    chmod 600 "$WAYVNC_CONFIG_DIR/config-mobile"
+    echo "[prime-vnc-mobile] Config written."
+else
+    echo "[prime-vnc-mobile] Config already exists, leaving as-is."
+fi
+echo "[prime-vnc-mobile] Installing systemd user service..."
+cp prime-vnc-mobile.service "$HOME/.config/systemd/user/"
+systemctl --user daemon-reload
+systemctl --user enable prime-vnc-mobile.service
+systemctl --user restart prime-vnc-mobile.service
+sleep 1
+if systemctl --user is-active --quiet prime-vnc-mobile.service; then
+    echo "[prime-vnc-mobile] wayvnc mobile running on $(tailscale ip -4):5902"
+else
+    echo "[prime-vnc-mobile] WARNING: wayvnc mobile failed to start. Check: journalctl --user -u prime-vnc-mobile.service -n 30"
+fi
 # ============================================================
 # Done
 # ============================================================
