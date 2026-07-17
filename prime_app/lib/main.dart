@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/api_client.dart';
 import 'services/app_lock.dart';
+import 'services/package_activity.dart';
 import 'theme/prime_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/lock_screen.dart';
@@ -23,6 +24,7 @@ class _PrimeAppState extends State<PrimeApp> {
   @override
   void initState() {
     super.initState();
+    PackageActivityCenter.instance.load();
     _apiClient.loadConfig().then((_) {
       setState(() => _loaded = true);
     });

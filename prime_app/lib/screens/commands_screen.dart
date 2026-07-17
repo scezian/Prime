@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../services/biometric_auth.dart';
 import '../theme/prime_theme.dart';
+import '../widgets/prime_toast.dart';
 
 class CommandsScreen extends StatefulWidget {
   final ApiClient apiClient;
@@ -164,6 +165,7 @@ class _CommandTileState extends State<_CommandTile> {
       _confirm = false;
       _error = null;
     });
+    final name = widget.command['name'] as String;
     try {
       final result = await widget.apiClient.runCommand(_id);
       if (!mounted) return;
@@ -175,6 +177,12 @@ class _CommandTileState extends State<_CommandTile> {
           _screenshotRequest = widget.apiClient.screenshotImageRequest();
         }
       });
+      final failed = result is Map && result['returncode'] != null && result['returncode'] != 0;
+      PrimeToast.show(
+        context,
+        message: failed ? '$name failed' : '$name ran successfully',
+        kind: failed ? ToastKind.error : ToastKind.success,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -187,6 +195,11 @@ class _CommandTileState extends State<_CommandTile> {
           _error = e.toString();
         }
       });
+      if (_fireCommandIds.contains(_id)) {
+        PrimeToast.show(context, message: '$name sent', kind: ToastKind.info);
+      } else {
+        PrimeToast.show(context, message: '$name failed', kind: ToastKind.error);
+      }
     }
   }
 
@@ -406,6 +419,7 @@ class _ServiceTileState extends State<_ServiceTile> {
         _loading = false;
         _lastActionResult = 'restarted';
       });
+      PrimeToast.show(context, message: '$_name restarted', kind: ToastKind.success);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -417,6 +431,11 @@ class _ServiceTileState extends State<_ServiceTile> {
           _error = e.toString();
         }
       });
+      if (_name == 'prime-daemon.service') {
+        PrimeToast.show(context, message: '$_name restarted', kind: ToastKind.success);
+      } else {
+        PrimeToast.show(context, message: '$_name restart failed', kind: ToastKind.error);
+      }
     }
   }
 

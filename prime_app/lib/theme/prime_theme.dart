@@ -43,6 +43,7 @@ class PrimeColors {
   static const mutedForeground = ink400;
   static const destructive = Color(0xFFEF4444); // red
   static const warning = Color(0xFFF59E0B); // amber
+  static const success = Color(0xFF22C55E); // green
   static const cpuAccent = Color(0xFF38BDF8); // cyan
   static const memAccent = Color(0xFFF472B6); // pink
   static const netAccent = Color(0xFF818CF8); // violet

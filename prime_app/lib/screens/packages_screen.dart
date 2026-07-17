@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../services/biometric_auth.dart';
+import '../services/package_activity.dart';
 import '../theme/prime_theme.dart';
+import 'package_activity_screen.dart';
 
 enum _ViewMode { installed, search }
 
@@ -117,8 +119,19 @@ class _PackagesScreenState extends State<PackagesScreen> {
       _busyPackage = name;
     });
 
+    final activityId = PackageActivityCenter.instance.start(
+      packageName: name,
+      action: PackageActivityAction.install,
+    );
+
     try {
       final result = await widget.apiClient.installPackage(name);
+      final success = result['returncode'] == 0;
+      PackageActivityCenter.instance.complete(
+        activityId,
+        success: success,
+        errorMessage: success ? null : _tailOutput(result),
+      );
       setState(() {
         _lastResult = result;
         _lastAction = 'install';
@@ -126,6 +139,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
       });
       await _refreshCurrentView();
     } catch (e) {
+      PackageActivityCenter.instance.complete(activityId, success: false, errorMessage: e.toString());
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       setState(() {
@@ -162,8 +176,19 @@ class _PackagesScreenState extends State<PackagesScreen> {
       _busyPackage = name;
     });
 
+    final activityId = PackageActivityCenter.instance.start(
+      packageName: name,
+      action: PackageActivityAction.uninstall,
+    );
+
     try {
       final result = await widget.apiClient.uninstallPackage(name);
+      final success = result['returncode'] == 0;
+      PackageActivityCenter.instance.complete(
+        activityId,
+        success: success,
+        errorMessage: success ? null : _tailOutput(result),
+      );
       setState(() {
         _lastResult = result;
         _lastAction = 'uninstall';
@@ -171,6 +196,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
       });
       await _refreshCurrentView();
     } catch (e) {
+      PackageActivityCenter.instance.complete(activityId, success: false, errorMessage: e.toString());
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       setState(() {
@@ -192,7 +218,62 @@ class _PackagesScreenState extends State<PackagesScreen> {
         _mode == _ViewMode.installed ? _results.length : _results.where((p) => (p as Map)['installed'] == true).length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Packages')),
+      appBar: AppBar(
+        title: const Text('Packages'),
+        actions: [
+          AnimatedBuilder(
+            animation: PackageActivityCenter.instance,
+            builder: (context, _) {
+              final center = PackageActivityCenter.instance;
+              final activeCount = center.items.where((i) => i.status == PackageActivityStatus.running).length;
+              final unread = center.unreadCount;
+              return IconButton(
+                tooltip: 'Activity',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PackageActivityScreen()),
+                ),
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.notifications_outlined, size: 22),
+                    if (activeCount > 0)
+                      Positioned(
+                        right: -6,
+                        top: -6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          constraints: const BoxConstraints(minWidth: 16),
+                          decoration: BoxDecoration(
+                            color: PrimeColors.primary,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: PrimeColors.background, width: 1.5),
+                          ),
+                          child: Text(
+                            '$activeCount',
+                            textAlign: TextAlign.center,
+                            style: PrimeTheme.text(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white, height: 1.3),
+                          ),
+                        ),
+                      )
+                    else if (unread > 0)
+                      Positioned(
+                        right: -1,
+                        top: -1,
+                        child: Container(
+                          width: 9,
+                          height: 9,
+                          decoration: const BoxDecoration(shape: BoxShape.circle, color: PrimeColors.destructive),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
