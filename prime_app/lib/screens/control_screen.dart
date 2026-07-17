@@ -221,6 +221,10 @@ class _ControlScreenState extends State<ControlScreen> {
     );
   }
 
+  void _openProcessSheet() {
+    _ProcessKillSheet.show(context: context, apiClient: widget.apiClient);
+  }
+
   @override
   Widget build(BuildContext context) {
     final displayVolume = _draggingVolume ?? _volume.toDouble();
@@ -318,6 +322,31 @@ class _ControlScreenState extends State<ControlScreen> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 20),
+            Text('PROCESSES', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: _openProcessSheet,
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: PrimeColors.card,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: PrimeColors.destructive.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.power_settings_new, size: 16, color: PrimeColors.destructive),
+                    const SizedBox(width: 8),
+                    Text('Terminate', style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground)),
+                    const Spacer(),
+                    const Icon(Icons.chevron_right, size: 16, color: PrimeColors.mutedForeground),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -574,9 +603,13 @@ class _LockToggleButtonState extends State<_LockToggleButton> {
       if (unlocked) {
         widget.onChanged(false);
       } else if (mounted) {
-        await SecureCredentials.clearUnlockPassword();
+        // Not auto-clearing the saved password here: the daemon can't
+        // reliably tell "wrong password" apart from "hyprlock hadn't
+        // exited yet", so treating every failure as a bad password and
+        // deleting it was too aggressive. Update it from Settings if it
+        // actually is wrong.
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unlock failed — check the password and try again')),
+          const SnackBar(content: Text('Unlock failed — try again, or update the password in Settings')),
         );
       }
     } catch (e) {
@@ -664,6 +697,163 @@ class _LockToggleButtonState extends State<_LockToggleButton> {
 /// already-known items, tap to connect, tap the connected item to
 /// disconnect (if a disconnect handler is provided). No password/pairing
 /// UI by design.
+class _ProcessKillSheet extends StatefulWidget {
+  final ApiClient apiClient;
+  const _ProcessKillSheet({required this.apiClient});
+
+  static void show({required BuildContext context, required ApiClient apiClient}) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: PrimeColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (_) => _ProcessKillSheet(apiClient: apiClient),
+    );
+  }
+
+  @override
+  State<_ProcessKillSheet> createState() => _ProcessKillSheetState();
+}
+
+class _ProcessKillSheetState extends State<_ProcessKillSheet> {
+  List<Map<String, dynamic>>? _processes;
+  String? _error;
+  int? _killingPid;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await widget.apiClient.getProcesses();
+      final list = (res['processes'] as List<dynamic>).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      setState(() {
+        _processes = list;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _kill(int pid) async {
+    setState(() => _killingPid = pid);
+    try {
+      await widget.apiClient.killProcess(pid);
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _killingPid = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.75;
+
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.power_settings_new, size: 16, color: PrimeColors.destructive),
+                  const SizedBox(width: 8),
+                  Text('TERMINATE', style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (_error != null)
+                Text(_error!, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.destructive))
+              else if (_processes == null)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground)),
+                )
+              else if (_processes!.isEmpty)
+                Text('no active processes', style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground))
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _processes!.length,
+                    itemBuilder: (context, index) {
+                      final item = _processes![index];
+                      final pid = item['pid'] as int;
+                      final name = item['name'] as String;
+                      final title = item['title'] as String? ?? '';
+                      final killing = _killingPid == pid;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: PrimeColors.card,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: PrimeColors.border),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(name, style: PrimeTheme.mono(fontSize: 13)),
+                                    if (title.isNotEmpty && title != name) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              if (killing)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.destructive),
+                                )
+                              else
+                                InkWell(
+                                  onTap: () => _kill(pid),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(4),
+                                    child: Icon(Icons.close, size: 18, color: PrimeColors.destructive),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DevicePickerSheet extends StatefulWidget {
   final String title;
   final IconData icon;
@@ -705,6 +895,7 @@ class _DevicePickerSheet extends StatefulWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: PrimeColors.background,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
@@ -783,88 +974,100 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.75;
+
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(widget.icon, size: 16, color: PrimeColors.netAccent),
-                const SizedBox(width: 8),
-                Text(widget.title, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground, letterSpacing: 2)),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (_error != null)
-              Text(_error!, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.destructive))
-            else if (_items == null)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground)),
-              )
-            else if (_items!.isEmpty)
-              Text(widget.emptyMessage, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground))
-            else
-              ..._items!.map((item) {
-                final id = widget.idOf(item);
-                final connected = widget.connectedOf(item);
-                final connecting = _connectingId == id;
-                final disconnecting = _disconnectingId == id;
-                final canDisconnect = connected && widget.disconnect != null;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: InkWell(
-                    onTap: connecting || disconnecting
-                        ? null
-                        : connected
-                            ? (canDisconnect ? () => _handleDisconnect(item) : null)
-                            : () => _handleConnect(item),
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: PrimeColors.card,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: PrimeColors.border),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(widget.icon, size: 16, color: PrimeColors.netAccent),
+                  const SizedBox(width: 8),
+                  Text(widget.title, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (_error != null)
+                Text(_error!, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.destructive))
+              else if (_items == null)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground)),
+                )
+              else if (_items!.isEmpty)
+                Text(widget.emptyMessage, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground))
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _items!.length,
+                    itemBuilder: (context, index) {
+                      final item = _items![index];
+                      final id = widget.idOf(item);
+                      final connected = widget.connectedOf(item);
+                      final connecting = _connectingId == id;
+                      final disconnecting = _disconnectingId == id;
+                      final canDisconnect = connected && widget.disconnect != null;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          onTap: connecting || disconnecting
+                              ? null
+                              : connected
+                                  ? (canDisconnect ? () => _handleDisconnect(item) : null)
+                                  : () => _handleConnect(item),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: PrimeColors.card,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: PrimeColors.border),
+                            ),
+                            child: Row(
                               children: [
-                                Text(widget.labelOf(item), style: PrimeTheme.mono(fontSize: 13)),
-                                const SizedBox(height: 2),
-                                Text(widget.subtitleOf(item), style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground)),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(widget.labelOf(item), style: PrimeTheme.mono(fontSize: 13)),
+                                      const SizedBox(height: 2),
+                                      Text(widget.subtitleOf(item), style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground)),
+                                    ],
+                                  ),
+                                ),
+                                if (connecting || disconnecting)
+                                  const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground),
+                                  )
+                                else if (connected)
+                                  Text(
+                                    canDisconnect ? 'disconnect' : 'connected',
+                                    style: PrimeTheme.mono(
+                                      fontSize: 10,
+                                      color: canDisconnect ? PrimeColors.destructive : PrimeColors.primary,
+                                    ),
+                                  )
+                                else
+                                  Text('connect', style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.netAccent)),
                               ],
                             ),
                           ),
-                          if (connecting || disconnecting)
-                            const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground),
-                            )
-                          else if (connected)
-                            Text(
-                              canDisconnect ? 'disconnect' : 'connected',
-                              style: PrimeTheme.mono(
-                                fontSize: 10,
-                                color: canDisconnect ? PrimeColors.destructive : PrimeColors.primary,
-                              ),
-                            )
-                          else
-                            Text('connect', style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.netAccent)),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              }),
-          ],
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -893,7 +1096,7 @@ class _SliderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
         color: PrimeColors.card,
         borderRadius: BorderRadius.circular(6),
@@ -903,7 +1106,7 @@ class _SliderCard extends StatelessWidget {
         children: [
           InkWell(
             onTap: onIconTap,
-            child: Icon(leadingIcon, size: 20, color: iconColor),
+            child: Icon(leadingIcon, size: 16, color: iconColor),
           ),
           Expanded(
             child: SliderTheme(
@@ -911,8 +1114,10 @@ class _SliderCard extends StatelessWidget {
                 activeTrackColor: activeColor,
                 inactiveTrackColor: PrimeColors.secondary,
                 thumbColor: activeColor,
-                overlayColor: activeColor.withValues(alpha: 0.15),
-                trackHeight: 3,
+                overlayColor: activeColor.withValues(alpha: 0.1),
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
               ),
               child: Slider(
                 value: value.clamp(0, 100),
@@ -924,11 +1129,11 @@ class _SliderCard extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 34,
+            width: 28,
             child: Text(
               '${value.round()}',
               textAlign: TextAlign.right,
-              style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground),
+              style: PrimeTheme.mono(fontSize: 11, color: PrimeColors.mutedForeground),
             ),
           ),
         ],
