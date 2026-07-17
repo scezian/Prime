@@ -124,8 +124,14 @@ fi
 chmod +x run.sh
 
 echo "[prime] Installing systemd user service..."
+# prime_daemon_service_template_marker: WorkingDirectory/ExecStart must point at
+# THIS checkout's actual path, not an assumed ~/Projects/prime location, so a
+# clone anywhere else still gets a working unit file.
 mkdir -p ~/.config/systemd/user
-cp prime-daemon.service ~/.config/systemd/user/
+DAEMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+sed -e "s|WorkingDirectory=%h/Projects/prime/prime-daemon|WorkingDirectory=$DAEMON_DIR|" \
+    -e "s|ExecStart=%h/Projects/prime/prime-daemon/run.sh|ExecStart=$DAEMON_DIR/run.sh|" \
+    prime-daemon.service > ~/.config/systemd/user/prime-daemon.service
 systemctl --user daemon-reload
 systemctl --user enable prime-daemon.service
 
@@ -182,7 +188,12 @@ export ANDROID_HOME
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator"
 
-SHELL_RC="$HOME/.zshrc"
+# prime_shell_rc_detect_marker
+case "$SHELL" in
+    */zsh) SHELL_RC="$HOME/.zshrc" ;;
+    */bash) SHELL_RC="$HOME/.bashrc" ;;
+    *) SHELL_RC="$HOME/.profile" ;;
+esac
 if ! grep -q "ANDROID_HOME" "$SHELL_RC" 2>/dev/null; then
     echo "[prime-app] Adding Android SDK env vars to $SHELL_RC..."
     cat >> "$SHELL_RC" << 'ENVEOF'
@@ -215,7 +226,9 @@ flutter doctor -v
 # fresh checkout of the app source always has everything it needs without
 # hunting through past conversation history for what to add.
 
-PRIME_APP_DIR="$HOME/Projects/prime/prime_app"
+# prime_app_dir_autodetect_marker
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PRIME_APP_DIR="$(dirname "$SCRIPT_DIR")/prime_app"
 FLUTTER_PACKAGES="http shared_preferences google_fonts file_picker path_provider local_auth flutter_secure_storage"
 
 if [ -d "$PRIME_APP_DIR" ]; then
