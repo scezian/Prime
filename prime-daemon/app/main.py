@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from app.auth import verify_token
 from app.commands import COMMANDS, SCREENSHOT_CACHE, is_screen_locked, unlock_screen
 from app.config import ALLOWLISTED_ROOTS
-from app import filesystem, packages, media, services, network
+from app import filesystem, packages, media, services, network, processes
 import psutil
 
 app = FastAPI(title="Prime Daemon")
@@ -140,6 +140,24 @@ def services_restart(service_name: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# ---- Processes ----
+
+@app.get("/processes", dependencies=[Depends(verify_token)])
+def processes_list():
+    try:
+        return processes.list_processes()
+    except processes.ProcessError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/processes/{pid}/kill", dependencies=[Depends(verify_token)])
+def processes_kill(pid: int):
+    try:
+        return processes.kill_process(pid)
+    except processes.ProcessError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ---- Filesystem ----
 
 @app.get("/fs/list", dependencies=[Depends(verify_token)])
@@ -259,7 +277,8 @@ class InstallBody(BaseModel):
 @app.post("/packages/install", dependencies=[Depends(verify_token)])
 def packages_install(body: InstallBody):
     try:
-        return packages.install_package(body.package)
+        job_id = packages.install_package_async(body.package)
+        return {"job_id": job_id}
     except packages.PackageManagerError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -267,9 +286,18 @@ def packages_install(body: InstallBody):
 @app.post("/packages/uninstall", dependencies=[Depends(verify_token)])
 def packages_uninstall(body: InstallBody):
     try:
-        return packages.uninstall_package(body.package)
+        job_id = packages.uninstall_package_async(body.package)
+        return {"job_id": job_id}
     except packages.PackageManagerError as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/packages/jobs/{job_id}", dependencies=[Depends(verify_token)])
+def packages_job_status(job_id: str):
+    try:
+        return packages.get_job(job_id)
+    except packages.PackageManagerError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 # ---- Media / Volume ----

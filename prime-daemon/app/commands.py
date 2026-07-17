@@ -159,7 +159,14 @@ def unlock_screen(password: str) -> dict:
     except subprocess.CalledProcessError:
         raise RuntimeError("failed to send password to the lock screen")
 
-    time.sleep(1.2)  # give hyprlock a moment to validate and exit
+    # Poll rather than a fixed sleep. hyprlock's PAM validation + exit
+    # can occasionally take longer than a fixed delay under load, and a
+    # naive fixed sleep can then report a correct unlock as a failure.
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        if not is_screen_locked():
+            return {"unlocked": True}
+        time.sleep(0.15)
     return {"unlocked": not is_screen_locked()}
 
 

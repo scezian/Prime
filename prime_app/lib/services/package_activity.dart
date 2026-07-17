@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'api_client.dart';
 
 enum PackageActivityAction { install, uninstall }
 
@@ -15,6 +16,12 @@ class PackageActivityItem {
   DateTime? finishedAt;
   String? errorMessage;
   bool read;
+  int? downloadedBytes;
+  int? totalBytes;
+  bool isAur;
+  int? phaseIndex;
+  int? phaseTotal;
+  String? phaseLabel;
 
   PackageActivityItem({
     required this.id,
@@ -25,6 +32,12 @@ class PackageActivityItem {
     this.finishedAt,
     this.errorMessage,
     this.read = false,
+    this.downloadedBytes,
+    this.totalBytes,
+    this.isAur = false,
+    this.phaseIndex,
+    this.phaseTotal,
+    this.phaseLabel,
   });
 
   Map<String, dynamic> toJson() => {
@@ -36,6 +49,12 @@ class PackageActivityItem {
         'finishedAt': finishedAt?.toIso8601String(),
         'errorMessage': errorMessage,
         'read': read,
+        'downloadedBytes': downloadedBytes,
+        'totalBytes': totalBytes,
+        'isAur': isAur,
+        'phaseIndex': phaseIndex,
+        'phaseTotal': phaseTotal,
+        'phaseLabel': phaseLabel,
       };
 
   factory PackageActivityItem.fromJson(Map<String, dynamic> json) => PackageActivityItem(
@@ -47,6 +66,12 @@ class PackageActivityItem {
         finishedAt: json['finishedAt'] != null ? DateTime.parse(json['finishedAt'] as String) : null,
         errorMessage: json['errorMessage'] as String?,
         read: json['read'] as bool? ?? false,
+        downloadedBytes: json['downloadedBytes'] as int?,
+        totalBytes: json['totalBytes'] as int?,
+        isAur: json['isAur'] as bool? ?? false,
+        phaseIndex: json['phaseIndex'] as int?,
+        phaseTotal: json['phaseTotal'] as int?,
+        phaseLabel: json['phaseLabel'] as String?,
       );
 }
 
@@ -116,6 +141,30 @@ class PackageActivityCenter extends ChangeNotifier {
     return id;
   }
 
+  void updateProgress(
+    String id, {
+    int? downloadedBytes,
+    int? totalBytes,
+    bool? isAur,
+    int? phaseIndex,
+    int? phaseTotal,
+    String? phaseLabel,
+  }) {
+    final matches = _items.where((i) => i.id == id);
+    if (matches.isEmpty) return;
+    final item = matches.first;
+    if (downloadedBytes != null) item.downloadedBytes = downloadedBytes;
+    if (totalBytes != null) item.totalBytes = totalBytes;
+    if (isAur != null) item.isAur = isAur;
+    if (phaseIndex != null) item.phaseIndex = phaseIndex;
+    if (phaseTotal != null) item.phaseTotal = phaseTotal;
+    if (phaseLabel != null) item.phaseLabel = phaseLabel;
+    notifyListeners();
+    // Deliberately not persisted on every tick — persisted state only
+    // needs to know "running" vs finished (for the interrupted-on-restart
+    // check above), not live byte counts.
+  }
+
   void complete(String id, {required bool success, String? errorMessage}) {
     final matches = _items.where((i) => i.id == id);
     if (matches.isEmpty) return;
@@ -125,6 +174,61 @@ class PackageActivityCenter extends ChangeNotifier {
     item.errorMessage = errorMessage;
     notifyListeners();
     _persist();
+  }
+
+  /// Starts an install/uninstall job against the daemon, tracks it as a
+  /// new activity item, polls /packages/jobs/{id} until it resolves, and
+  /// marks the item success/failed. Centralized here so both the initial
+  /// action (packages_screen) and retries (activity screen) share one
+  /// implementation instead of duplicating the polling loop.
+  ///
+  /// Returns the final job status map. Throws if the daemon call itself
+  /// fails (network error, bad response) — callers that don't need to
+  /// react to that beyond the activity log entry can ignore the error.
+  Future<Map<String, dynamic>> run({
+    required ApiClient api,
+    required String packageName,
+    required PackageActivityAction action,
+  }) async {
+    final id = start(packageName: packageName, action: action);
+    try {
+      final startResult = action == PackageActivityAction.install
+          ? await api.installPackage(packageName)
+          : await api.uninstallPackage(packageName);
+
+      final jobId = startResult['job_id'] as String?;
+      if (jobId == null) {
+        throw Exception('Daemon did not return a job id');
+      }
+
+      while (true) {
+        await Future.delayed(const Duration(milliseconds: 900));
+        final job = await api.getPackageJob(jobId);
+
+        updateProgress(
+          id,
+          downloadedBytes: (job['downloaded_bytes'] as num?)?.round(),
+          totalBytes: (job['total_bytes'] as num?)?.round(),
+          isAur: job['is_aur'] as bool?,
+          phaseIndex: (job['phase_index'] as num?)?.round(),
+          phaseTotal: (job['phase_total'] as num?)?.round(),
+          phaseLabel: job['phase_label'] as String?,
+        );
+
+        final status = job['status'] as String? ?? 'failed';
+        if (status == 'success' || status == 'failed') {
+          complete(
+            id,
+            success: status == 'success',
+            errorMessage: status == 'success' ? null : (job['error'] as String? ?? 'Failed'),
+          );
+          return job;
+        }
+      }
+    } catch (e) {
+      complete(id, success: false, errorMessage: e.toString());
+      rethrow;
+    }
   }
 
   void markAllRead() {

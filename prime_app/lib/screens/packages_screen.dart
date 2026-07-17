@@ -119,18 +119,11 @@ class _PackagesScreenState extends State<PackagesScreen> {
       _busyPackage = name;
     });
 
-    final activityId = PackageActivityCenter.instance.start(
-      packageName: name,
-      action: PackageActivityAction.install,
-    );
-
     try {
-      final result = await widget.apiClient.installPackage(name);
-      final success = result['returncode'] == 0;
-      PackageActivityCenter.instance.complete(
-        activityId,
-        success: success,
-        errorMessage: success ? null : _tailOutput(result),
+      final result = await PackageActivityCenter.instance.run(
+        api: widget.apiClient,
+        packageName: name,
+        action: PackageActivityAction.install,
       );
       setState(() {
         _lastResult = result;
@@ -139,7 +132,6 @@ class _PackagesScreenState extends State<PackagesScreen> {
       });
       await _refreshCurrentView();
     } catch (e) {
-      PackageActivityCenter.instance.complete(activityId, success: false, errorMessage: e.toString());
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       setState(() {
@@ -176,18 +168,11 @@ class _PackagesScreenState extends State<PackagesScreen> {
       _busyPackage = name;
     });
 
-    final activityId = PackageActivityCenter.instance.start(
-      packageName: name,
-      action: PackageActivityAction.uninstall,
-    );
-
     try {
-      final result = await widget.apiClient.uninstallPackage(name);
-      final success = result['returncode'] == 0;
-      PackageActivityCenter.instance.complete(
-        activityId,
-        success: success,
-        errorMessage: success ? null : _tailOutput(result),
+      final result = await PackageActivityCenter.instance.run(
+        api: widget.apiClient,
+        packageName: name,
+        action: PackageActivityAction.uninstall,
       );
       setState(() {
         _lastResult = result;
@@ -196,7 +181,6 @@ class _PackagesScreenState extends State<PackagesScreen> {
       });
       await _refreshCurrentView();
     } catch (e) {
-      PackageActivityCenter.instance.complete(activityId, success: false, errorMessage: e.toString());
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       setState(() {

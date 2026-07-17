@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../services/app_lock.dart';
+import '../services/secure_credentials.dart';
 import '../theme/prime_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -25,12 +26,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _biometricHardwareAvailable = false;
   bool _lockLoaded = false;
 
+  final _unlockPasswordController = TextEditingController();
+  bool _unlockPasswordSet = false;
+  bool _showUnlockPassword = false;
+
   @override
   void initState() {
     super.initState();
     _hostController.text = widget.apiClient.host ?? '';
     _tokenController.text = widget.apiClient.token ?? '';
     _loadLockState();
+    _loadUnlockPasswordState();
   }
 
   Future<void> _loadLockState() async {
@@ -50,6 +56,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _hostController.dispose();
     _tokenController.dispose();
+    _unlockPasswordController.dispose();
     super.dispose();
   }
 
@@ -124,6 +131,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN updated')));
     }
+  }
+
+  Future<void> _loadUnlockPasswordState() async {
+    final saved = await SecureCredentials.getUnlockPassword();
+    if (!mounted) return;
+    setState(() => _unlockPasswordSet = saved != null && saved.isNotEmpty);
+  }
+
+  Future<void> _saveUnlockPassword() async {
+    final value = _unlockPasswordController.text;
+    if (value.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a password first')));
+      return;
+    }
+    await SecureCredentials.setUnlockPassword(value);
+    _unlockPasswordController.clear();
+    if (!mounted) return;
+    setState(() {
+      _unlockPasswordSet = true;
+      _showUnlockPassword = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Unlock password saved')));
+  }
+
+  Future<void> _clearUnlockPassword() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: PrimeColors.card,
+        title: Text('Remove saved password?', style: PrimeTheme.text(fontSize: 15, fontWeight: FontWeight.w700)),
+        content: Text(
+          "You'll be asked to type it again next time you unlock.",
+          style: PrimeTheme.text(fontSize: 12, color: PrimeColors.mutedForeground),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: PrimeTheme.text(fontSize: 12, color: PrimeColors.mutedForeground)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: PrimeColors.destructive),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Remove', style: PrimeTheme.text(fontSize: 12, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await SecureCredentials.clearUnlockPassword();
+    if (!mounted) return;
+    setState(() => _unlockPasswordSet = false);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved password removed')));
   }
 
   /// Two-step "enter PIN" + "confirm PIN" dialog. Returns the new PIN, or
@@ -335,6 +394,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onToggleBiometric: _onToggleBiometric,
               onChangePin: _onChangePin,
             ),
+          const SizedBox(height: 16),
+          _UnlockPasswordCard(
+            controller: _unlockPasswordController,
+            isSet: _unlockPasswordSet,
+            obscure: !_showUnlockPassword,
+            onToggleObscure: () => setState(() => _showUnlockPassword = !_showUnlockPassword),
+            onSave: _saveUnlockPassword,
+            onClear: _clearUnlockPassword,
+          ),
         ],
       ),
     );
@@ -461,6 +529,140 @@ class _AppLockCard extends StatelessWidget {
                     ),
                   ),
                 ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UnlockPasswordCard extends StatelessWidget {
+  final TextEditingController controller;
+  final bool isSet;
+  final bool obscure;
+  final VoidCallback onToggleObscure;
+  final VoidCallback onSave;
+  final VoidCallback onClear;
+
+  const _UnlockPasswordCard({
+    required this.controller,
+    required this.isSet,
+    required this.obscure,
+    required this.onToggleObscure,
+    required this.onSave,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: PrimeColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: PrimeColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: PrimeColors.border)),
+            ),
+            child: Text(
+              'LAPTOP UNLOCK PASSWORD',
+              style: PrimeTheme.text(fontSize: 11, fontWeight: FontWeight.w700, color: PrimeColors.prime400, letterSpacing: 1.8),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      isSet ? Icons.check_circle_outline : Icons.info_outline,
+                      size: 14,
+                      color: isSet ? PrimeColors.success : PrimeColors.mutedForeground,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isSet ? 'Saved — used automatically on Unlock' : 'Not saved yet',
+                      style: PrimeTheme.text(fontSize: 12, color: PrimeColors.mutedForeground),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        obscureText: obscure,
+                        style: PrimeTheme.mono(fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: isSet ? 'Enter a new password to replace it' : 'Laptop password',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: onToggleObscure,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: PrimeColors.border),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                          size: 15,
+                          color: PrimeColors.mutedForeground,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Stored encrypted on this device only, never on the laptop. Fingerprint still confirms every unlock.',
+                  style: PrimeTheme.text(fontSize: 11, color: PrimeColors.mutedForeground),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: PrimeColors.primary,
+                          foregroundColor: PrimeColors.primaryForeground,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: onSave,
+                        child: Text('save', style: PrimeTheme.mono(fontSize: 13, fontWeight: FontWeight.w500)),
+                      ),
+                    ),
+                    if (isSet) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: PrimeColors.destructive,
+                            side: BorderSide(color: PrimeColors.destructive.withValues(alpha: 0.4)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onPressed: onClear,
+                          child: Text('remove', style: PrimeTheme.mono(fontSize: 13, fontWeight: FontWeight.w500)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),

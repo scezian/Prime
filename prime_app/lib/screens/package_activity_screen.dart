@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api_client.dart';
 import '../services/package_activity.dart';
 import '../theme/prime_theme.dart';
 
@@ -57,6 +58,23 @@ class _PackageActivityScreenState extends State<PackageActivityScreen> {
     if (confirmed == true) _center.deleteAll();
   }
 
+  /// Re-runs a failed install/uninstall. Creates its own ApiClient rather
+  /// than requiring one to be passed in from the Packages screen, since
+  /// this screen can be reached (and left open) independently of it.
+  /// PackageActivityCenter.run() starts a fresh activity item and polls
+  /// it — the same path a first attempt takes — so the retried item just
+  /// moves back up into "IN PROGRESS" with its own live progress bar.
+  Future<void> _retry(PackageActivityItem item) async {
+    final api = ApiClient();
+    await api.loadConfig();
+    try {
+      await _center.run(api: api, packageName: item.packageName, action: item.action);
+    } catch (_) {
+      // Error is already recorded on the new activity item by run();
+      // nothing further to do here.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _center.items;
@@ -94,7 +112,7 @@ class _PackageActivityScreenState extends State<PackageActivityScreen> {
                   const SizedBox(height: 10),
                   ...running.map((i) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
-                        child: _ActivityTile(item: i),
+                        child: _ActivityTile(item: i, onRetry: null),
                       )),
                   const SizedBox(height: 22),
                 ],
@@ -103,7 +121,10 @@ class _PackageActivityScreenState extends State<PackageActivityScreen> {
                   const SizedBox(height: 10),
                   ...history.map((i) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
-                        child: _ActivityTile(item: i),
+                        child: _ActivityTile(
+                          item: i,
+                          onRetry: i.status == PackageActivityStatus.failed ? () => _retry(i) : null,
+                        ),
                       )),
                 ],
               ],
@@ -125,9 +146,20 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
+String _formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  final kb = bytes / 1024;
+  if (kb < 1024) return '${kb.toStringAsFixed(0)} KB';
+  final mb = kb / 1024;
+  if (mb < 1024) return '${mb.toStringAsFixed(1)} MB';
+  final gb = mb / 1024;
+  return '${gb.toStringAsFixed(2)} GB';
+}
+
 class _ActivityTile extends StatelessWidget {
   final PackageActivityItem item;
-  const _ActivityTile({required this.item});
+  final VoidCallback? onRetry;
+  const _ActivityTile({required this.item, required this.onRetry});
 
   Color get _accent {
     switch (item.status) {
@@ -169,6 +201,21 @@ class _ActivityTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showByteBar = item.status == PackageActivityStatus.running &&
+        !item.isAur &&
+        item.totalBytes != null &&
+        item.totalBytes! > 0;
+    final showPhaseBar = item.status == PackageActivityStatus.running &&
+        item.isAur &&
+        item.phaseTotal != null &&
+        item.phaseTotal! > 0;
+    final showProgressBar = showByteBar || showPhaseBar;
+    final progressValue = showByteBar
+        ? (item.downloadedBytes ?? 0) / item.totalBytes!
+        : showPhaseBar
+            ? (item.phaseIndex ?? 0) / item.phaseTotal!
+            : null;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -187,9 +234,13 @@ class _ActivityTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(11),
             ),
             child: item.status == PackageActivityStatus.running
-                ? const Padding(
-                    padding: EdgeInsets.all(9),
-                    child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.primary),
+                ? Padding(
+                    padding: const EdgeInsets.all(9),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: PrimeColors.primary,
+                      value: progressValue,
+                    ),
                   )
                 : Icon(_icon, size: 18, color: _accent),
           ),
@@ -217,7 +268,37 @@ class _ActivityTile extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 3),
-                Text('$_statusLabel · ${_timeAgo(item.startedAt)}', style: PrimeTheme.text(fontSize: 11, color: _accent)),
+                Row(
+                  children: [
+                    Text('$_statusLabel · ${_timeAgo(item.startedAt)}', style: PrimeTheme.text(fontSize: 11, color: _accent)),
+                    if (showByteBar) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '· ${_formatBytes(item.downloadedBytes ?? 0)} / ${_formatBytes(item.totalBytes!)}',
+                        style: PrimeTheme.text(fontSize: 11, color: PrimeColors.mutedForeground),
+                      ),
+                    ],
+                    if (showPhaseBar) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '· ${item.phaseLabel ?? "Working"} (${(item.phaseIndex ?? 0) + 1}/${item.phaseTotal})',
+                        style: PrimeTheme.text(fontSize: 11, color: PrimeColors.mutedForeground),
+                      ),
+                    ],
+                  ],
+                ),
+                if (showProgressBar) ...[
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: progressValue,
+                      minHeight: 5,
+                      backgroundColor: PrimeColors.border,
+                      valueColor: AlwaysStoppedAnimation<Color>(PrimeColors.primary),
+                    ),
+                  ),
+                ],
                 if (item.errorMessage != null) ...[
                   const SizedBox(height: 4),
                   Text(
@@ -225,6 +306,23 @@ class _ActivityTile extends StatelessWidget {
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: PrimeTheme.text(fontSize: 11, color: PrimeColors.mutedForeground),
+                  ),
+                ],
+                if (onRetry != null) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: onRetry,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: PrimeColors.primary,
+                      ),
+                      icon: const Icon(Icons.refresh, size: 15),
+                      label: Text('Retry', style: PrimeTheme.text(fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
                   ),
                 ],
               ],

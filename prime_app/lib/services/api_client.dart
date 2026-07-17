@@ -195,6 +195,9 @@ class ApiClient {
   Future<Map<String, dynamic>> uninstallPackage(String package) =>
       _post('/packages/uninstall', {'package': package});
 
+  Future<Map<String, dynamic>> getPackageJob(String jobId) =>
+      _get('/packages/jobs/$jobId');
+
   // ---- Media / Volume ----
 
   Future<Map<String, dynamic>> getNowPlaying() => _get('/media/now-playing');
@@ -240,6 +243,12 @@ class ApiClient {
   Future<Map<String, dynamic>> setBluetoothRadio(bool enabled) => _post('/network/bluetooth/power', {'enabled': enabled});
 
   Future<Map<String, dynamic>> disconnectBluetooth(String mac) => _post('/network/bluetooth/disconnect', {'mac': mac});
+
+  // ---- Processes ----
+
+  Future<Map<String, dynamic>> getProcesses() => _get('/processes');
+
+  Future<Map<String, dynamic>> killProcess(int pid) => _post('/processes/$pid/kill');
 
   Future<Map<String, dynamic>> getLockStatus() => _get('/power/lock-status');
 
