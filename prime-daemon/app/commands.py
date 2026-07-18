@@ -191,11 +191,24 @@ def run_nocturne() -> dict:
     result = {"mpv": False, "brightness": False, "locked": False}
 
     if NOCTURNE_TRACK.exists():
-        subprocess.Popen(
-            ["mpv", "--script=/usr/lib/mpv-mpris/mpris.so", str(NOCTURNE_TRACK)],
-            env=env,
-        )
+        subprocess.Popen(["mpv", "--script=/usr/lib/mpv-mpris/mpris.so", "--force-window=yes", str(NOCTURNE_TRACK)], env=env)
         result["mpv"] = True
+        import threading
+        import time
+
+        def _focus_mpv():
+            for _ in range(10):
+                out = subprocess.run(
+                    ["hyprctl", "clients"], capture_output=True, text=True, env=env
+                ).stdout
+                if "class: mpv" in out:
+                    subprocess.run(
+                        ["hyprctl", "dispatch", "focuswindow", "class:^(mpv)$"], env=env
+                    )
+                    return
+                time.sleep(0.2)
+
+        threading.Thread(target=_focus_mpv, daemon=True).start()
 
     try:
         subprocess.run(["brightnessctl", "set", "1"], capture_output=True, text=True, timeout=5)
