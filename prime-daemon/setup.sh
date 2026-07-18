@@ -44,8 +44,12 @@ echo "[prime] Tailscale OK: $(tailscale ip -4)"
 
 echo "[prime] Checking for paru..."
 if ! python -c "import shutil,sys; sys.exit(0 if shutil.which('paru') else 1)"; then
-    echo "[prime] paru not found. Installing..."
-    sudo pacman -S --noconfirm paru
+    echo "[prime] paru not found. Building from AUR..."
+    sudo pacman -S --needed --noconfirm base-devel git
+    TMP_PARU=$(mktemp -d)
+    git clone https://aur.archlinux.org/paru.git "$TMP_PARU"
+    (cd "$TMP_PARU" && makepkg -si --noconfirm)
+    rm -rf "$TMP_PARU"
 fi
 echo "[prime] paru OK: $(which paru)"
 
