@@ -343,7 +343,7 @@ class _ControlScreenState extends State<ControlScreen> {
                     const SizedBox(width: 8),
                     Text('Terminate', style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground)),
                     const Spacer(),
-                    const Icon(Icons.chevron_right, size: 16, color: PrimeColors.mutedForeground),
+                    Icon(Icons.chevron_right, size: 16, color: PrimeColors.mutedForeground),
                   ],
                 ),
               ),
@@ -779,7 +779,7 @@ class _ProcessKillSheetState extends State<_ProcessKillSheet> {
               if (_error != null)
                 Text(_error!, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.destructive))
               else if (_processes == null)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),
                   child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground)),
                 )
@@ -996,7 +996,7 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
               if (_error != null)
                 Text(_error!, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.destructive))
               else if (_items == null)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),
                   child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground)),
                 )
@@ -1043,7 +1043,7 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
                                   ),
                                 ),
                                 if (connecting || disconnecting)
-                                  const SizedBox(
+                                  SizedBox(
                                     width: 14,
                                     height: 14,
                                     child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground),
@@ -1193,8 +1193,8 @@ class _NowPlayingCardState extends State<_NowPlayingCard> with SingleTickerProvi
     Widget fallback = Container(
       width: size,
       height: size,
-      decoration: const BoxDecoration(color: PrimeColors.secondary, shape: BoxShape.circle),
-      child: const Icon(Icons.music_note, color: PrimeColors.mutedForeground, size: 24),
+      decoration: BoxDecoration(color: PrimeColors.secondary, shape: BoxShape.circle),
+      child: Icon(Icons.music_note, color: PrimeColors.mutedForeground, size: 24),
     );
 
     ImageProvider? provider;
@@ -1278,7 +1278,7 @@ class _NowPlayingCardState extends State<_NowPlayingCard> with SingleTickerProvi
                       value: (nowPlaying['position_seconds'] as int) / (nowPlaying['duration_seconds'] as int),
                       minHeight: 3,
                       backgroundColor: PrimeColors.secondary,
-                      valueColor: const AlwaysStoppedAnimation(PrimeColors.primary),
+                      valueColor: AlwaysStoppedAnimation(PrimeColors.primary),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1298,7 +1298,7 @@ class _NowPlayingCardState extends State<_NowPlayingCard> with SingleTickerProvi
                   children: [
                     IconButton(
                       onPressed: widget.onPrevious,
-                      icon: const Icon(Icons.skip_previous, color: PrimeColors.foreground),
+                      icon: Icon(Icons.skip_previous, color: PrimeColors.foreground),
                       iconSize: 26,
                     ),
                     const SizedBox(width: 12),
@@ -1307,7 +1307,7 @@ class _NowPlayingCardState extends State<_NowPlayingCard> with SingleTickerProvi
                       borderRadius: BorderRadius.circular(30),
                       child: Container(
                         padding: const EdgeInsets.all(12),
-                        decoration: const BoxDecoration(color: PrimeColors.primary, shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: PrimeColors.primary, shape: BoxShape.circle),
                         child: Icon(
                           playing ? Icons.pause : Icons.play_arrow,
                           color: PrimeColors.primaryForeground,
@@ -1318,7 +1318,7 @@ class _NowPlayingCardState extends State<_NowPlayingCard> with SingleTickerProvi
                     const SizedBox(width: 12),
                     IconButton(
                       onPressed: widget.onNext,
-                      icon: const Icon(Icons.skip_next, color: PrimeColors.foreground),
+                      icon: Icon(Icons.skip_next, color: PrimeColors.foreground),
                       iconSize: 26,
                     ),
                   ],

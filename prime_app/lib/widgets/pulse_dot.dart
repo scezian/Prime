@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import '../theme/prime_theme.dart';
 
 class PulseDot extends StatefulWidget {
-  final Color color;
+  final Color? color;
   final double size;
 
-  const PulseDot({super.key, this.color = PrimeColors.primary, this.size = 8});
+  const PulseDot({super.key, this.color, this.size = 8});
 
   @override
   State<PulseDot> createState() => _PulseDotState();
@@ -35,6 +35,7 @@ class _PulseDotState extends State<PulseDot> with SingleTickerProviderStateMixin
         animation: _controller,
         builder: (context, _) {
           final t = _controller.value;
+          final resolvedColor = widget.color ?? PrimeColors.primary;
           return Stack(
             alignment: Alignment.center,
             children: [
@@ -43,13 +44,13 @@ class _PulseDotState extends State<PulseDot> with SingleTickerProviderStateMixin
                 child: Container(
                   width: widget.size * (1 + t * 1.2),
                   height: widget.size * (1 + t * 1.2),
-                  decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: resolvedColor, shape: BoxShape.circle),
                 ),
               ),
               Container(
                 width: widget.size,
                 height: widget.size,
-                decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+                decoration: BoxDecoration(color: resolvedColor, shape: BoxShape.circle),
               ),
             ],
           );

@@ -204,18 +204,18 @@ class _PinPad extends StatelessWidget {
                 ? _key(
                     onTap: checking ? null : onBiometric,
                     child: checking
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.prime300),
                           )
-                        : const Icon(Icons.fingerprint, color: PrimeColors.prime300, size: 26),
+                        : Icon(Icons.fingerprint, color: PrimeColors.prime300, size: 26),
                   )
                 : const SizedBox(width: 68, height: 68),
             _digitKey('0'),
             _key(
               onTap: onBackspace,
-              child: const Icon(Icons.backspace_outlined, size: 20, color: PrimeColors.mutedForeground),
+              child: Icon(Icons.backspace_outlined, size: 20, color: PrimeColors.mutedForeground),
             ),
           ],
         ),

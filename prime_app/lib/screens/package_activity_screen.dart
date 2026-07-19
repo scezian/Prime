@@ -263,7 +263,7 @@ class _ActivityTile extends StatelessWidget {
                         width: 7,
                         height: 7,
                         margin: const EdgeInsets.only(left: 6),
-                        decoration: const BoxDecoration(shape: BoxShape.circle, color: PrimeColors.primary),
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: PrimeColors.primary),
                       ),
                   ],
                 ),

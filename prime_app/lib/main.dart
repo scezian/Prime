@@ -3,6 +3,7 @@ import 'services/api_client.dart';
 import 'services/app_lock.dart';
 import 'services/package_activity.dart';
 import 'theme/prime_theme.dart';
+import 'theme/theme_controller.dart';
 import 'screens/home_screen.dart';
 import 'screens/lock_screen.dart';
 
@@ -25,6 +26,7 @@ class _PrimeAppState extends State<PrimeApp> {
   void initState() {
     super.initState();
     PackageActivityCenter.instance.load();
+    ThemeController.instance.load();
     _apiClient.loadConfig().then((_) {
       setState(() => _loaded = true);
     });
@@ -32,17 +34,20 @@ class _PrimeAppState extends State<PrimeApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Prime',
-      theme: PrimeTheme.dark,
-      darkTheme: PrimeTheme.dark,
-      themeMode: ThemeMode.dark,
-      home: !_loaded
-          ? Scaffold(
-              backgroundColor: PrimeColors.background,
-              body: const Center(child: CircularProgressIndicator(color: PrimeColors.primary)),
-            )
-          : _AppLockGate(child: HomeScreen(apiClient: _apiClient)),
+    return AnimatedBuilder(
+      animation: ThemeController.instance,
+      builder: (context, _) => MaterialApp(
+        title: 'Prime',
+        theme: PrimeTheme.dark,
+        darkTheme: PrimeTheme.dark,
+        themeMode: ThemeMode.dark,
+        home: !_loaded
+            ? Scaffold(
+                backgroundColor: PrimeColors.background,
+                body: Center(child: CircularProgressIndicator(color: PrimeColors.primary)),
+              )
+            : _AppLockGate(child: HomeScreen(apiClient: _apiClient)),
+      ),
     );
   }
 }
@@ -120,7 +125,7 @@ class _AppLockGateState extends State<_AppLockGate> with WidgetsBindingObserver 
     if (!_lockChecked) {
       return Scaffold(
         backgroundColor: PrimeColors.background,
-        body: const Center(child: CircularProgressIndicator(color: PrimeColors.primary)),
+        body: Center(child: CircularProgressIndicator(color: PrimeColors.primary)),
       );
     }
     if (_locked) {

@@ -57,7 +57,7 @@ class _CommandsScreenState extends State<CommandsScreen> {
               ),
             )
           : (_commands == null || _services == null)
-              ? const Center(child: CircularProgressIndicator(color: PrimeColors.primary))
+              ? Center(child: CircularProgressIndicator(color: PrimeColors.primary))
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: _buildSections(),
@@ -245,7 +245,7 @@ class _CommandTileState extends State<_CommandTile> {
                     ),
                   ),
                   if (_loading)
-                    const SizedBox(
+                    SizedBox(
                       width: 12,
                       height: 12,
                       child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground),
@@ -253,7 +253,7 @@ class _CommandTileState extends State<_CommandTile> {
                   else if (_confirm)
                     InkWell(
                       onTap: () => setState(() => _confirm = false),
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(4),
                         child: Icon(Icons.close, size: 13, color: PrimeColors.mutedForeground),
                       ),
@@ -264,7 +264,7 @@ class _CommandTileState extends State<_CommandTile> {
                       child: AnimatedRotation(
                         turns: _expanded ? 0.25 : 0,
                         duration: const Duration(milliseconds: 200),
-                        child: const Icon(Icons.chevron_right, size: 14, color: PrimeColors.mutedForeground),
+                        child: Icon(Icons.chevron_right, size: 14, color: PrimeColors.mutedForeground),
                       ),
                     ),
                 ],
@@ -329,7 +329,7 @@ class _CommandTileState extends State<_CommandTile> {
           ),
           loadingBuilder: (context, child, progress) {
             if (progress == null) return child;
-            return const Padding(
+            return Padding(
               padding: EdgeInsets.all(20),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground)),
             );
@@ -477,7 +477,7 @@ class _ServiceTileState extends State<_ServiceTile> {
                     ),
                   ),
                   if (_loading)
-                    const SizedBox(
+                    SizedBox(
                       width: 12,
                       height: 12,
                       child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground),
@@ -485,13 +485,13 @@ class _ServiceTileState extends State<_ServiceTile> {
                   else if (_confirm)
                     InkWell(
                       onTap: () => setState(() => _confirm = false),
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(4),
                         child: Icon(Icons.close, size: 13, color: PrimeColors.mutedForeground),
                       ),
                     )
                   else
-                    const Icon(Icons.restart_alt, size: 15, color: PrimeColors.mutedForeground),
+                    Icon(Icons.restart_alt, size: 15, color: PrimeColors.mutedForeground),
                 ],
               ),
             ),

@@ -270,7 +270,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  const Icon(Icons.search, size: 14, color: PrimeColors.mutedForeground),
+                  Icon(Icons.search, size: 14, color: PrimeColors.mutedForeground),
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
@@ -293,7 +293,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                         _searchController.clear();
                         _loadInstalled();
                       },
-                      child: const Icon(Icons.close, size: 13, color: PrimeColors.mutedForeground),
+                      child: Icon(Icons.close, size: 13, color: PrimeColors.mutedForeground),
                     ),
                 ],
               ),
@@ -315,7 +315,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
               ],
             ),
           ),
-          if (_loading) const Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: PrimeColors.primary)),
+          if (_loading) Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: PrimeColors.primary)),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.all(16),
@@ -342,7 +342,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.terminal, size: 11, color: PrimeColors.primary),
+                            Icon(Icons.terminal, size: 11, color: PrimeColors.primary),
                             const SizedBox(width: 6),
                             Text(
                               '${_lastResult!['returncode'] == 0 ? (_lastAction == 'install' ? 'installed' : 'removed') : 'failed'} · $_lastPackageName',
@@ -352,7 +352,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                         ),
                         InkWell(
                           onTap: () => setState(() => _lastResult = null),
-                          child: const Icon(Icons.close, size: 12, color: PrimeColors.mutedForeground),
+                          child: Icon(Icons.close, size: 12, color: PrimeColors.mutedForeground),
                         ),
                       ],
                     ),
@@ -427,7 +427,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Icon(Icons.check, size: 8, color: PrimeColors.primary),
+                                        Icon(Icons.check, size: 8, color: PrimeColors.primary),
                                         const SizedBox(width: 2),
                                         Text('installed', style: PrimeTheme.mono(fontSize: 8, color: PrimeColors.primary)),
                                       ],
@@ -453,7 +453,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
                         ),
                         const SizedBox(width: 8),
                         if (isBusyThis)
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.only(top: 4),
                             child: SizedBox(
                               width: 14,

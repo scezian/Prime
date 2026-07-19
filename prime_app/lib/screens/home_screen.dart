@@ -172,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             if (_error != null) _ErrorBanner(message: _error!),
             if (_loading && _status == null)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.all(24),
                 child: Center(child: CircularProgressIndicator(color: PrimeColors.primary)),
               ),

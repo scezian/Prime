@@ -218,7 +218,7 @@ class _FilesScreenState extends State<FilesScreen> {
         title: const Text('Files'),
         actions: [
           if (_transferBusy)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(16),
               child: SizedBox(
                 width: 16,
@@ -278,7 +278,7 @@ class _FilesScreenState extends State<FilesScreen> {
                 if (!_atRoot)
                   InkWell(
                     onTap: _goUp,
-                    child: const Padding(
+                    child: Padding(
                       padding: EdgeInsets.only(right: 6),
                       child: Icon(Icons.chevron_left, size: 16, color: PrimeColors.mutedForeground),
                     ),
@@ -310,7 +310,7 @@ class _FilesScreenState extends State<FilesScreen> {
             ),
           ),
           const Divider(height: 1),
-          if (_loading) const Expanded(child: Center(child: CircularProgressIndicator(color: PrimeColors.primary))),
+          if (_loading) Expanded(child: Center(child: CircularProgressIndicator(color: PrimeColors.primary))),
           if (_error != null)
             Expanded(
               child: Center(
@@ -371,7 +371,7 @@ class _FilesScreenState extends State<FilesScreen> {
                                         style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground),
                                       ),
                                     if (isDir)
-                                      const Icon(Icons.chevron_right, size: 12, color: PrimeColors.mutedForeground),
+                                      Icon(Icons.chevron_right, size: 12, color: PrimeColors.mutedForeground),
                                   ],
                                 ),
                               ),
@@ -419,7 +419,7 @@ class _FilesScreenState extends State<FilesScreen> {
                                     ),
                                     InkWell(
                                       onTap: () => setState(() => _actionFile = null),
-                                      child: const Padding(
+                                      child: Padding(
                                         padding: EdgeInsets.only(left: 8),
                                         child: Icon(Icons.close, size: 13, color: PrimeColors.mutedForeground),
                                       ),
