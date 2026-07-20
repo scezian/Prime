@@ -222,6 +222,57 @@ def run_nocturne() -> dict:
     return result
 
 
+
+def restart_prime_daemon() -> dict:
+    """Restart the prime-daemon systemd service itself.
+
+    Fire-and-forget, same pattern as reboot/shutdown — the connection
+    drops before a normal response could be sent back anyway.
+    """
+    return run_fire(["systemctl", "--user", "restart", "prime-daemon.service"])
+
+
+def is_hyprsunset_running() -> bool:
+    proc = subprocess.run(["pgrep", "-x", "hyprsunset"], capture_output=True, text=True, timeout=5)
+    return proc.returncode == 0
+
+
+HYPRPANEL_CONFIG = Path.home() / ".config" / "hyprpanel" / "config.json"
+DEFAULT_SUNSET_TEMP = 4000
+
+
+def _get_sunset_temp() -> int:
+    """Read the configured warmth from HyprPanel's own config, since
+    HyprPanel is what normally launches hyprsunset (with -t) on this
+    system. Falls back to a sane default if the config is missing or
+    malformed, so this never hard-fails the command."""
+    import json
+
+    try:
+        data = json.loads(HYPRPANEL_CONFIG.read_text())
+        return int(data.get("sunset_temp", DEFAULT_SUNSET_TEMP))
+    except (OSError, ValueError, TypeError):
+        return DEFAULT_SUNSET_TEMP
+
+
+def restart_hyprsunset() -> dict:
+    """Kill any running hyprsunset and start a fresh instance at the
+    warmth level configured in HyprPanel (matching what HyprPanel itself
+    would launch it with), rather than hyprsunset's neutral default."""
+    import time
+
+    was_running = is_hyprsunset_running()
+    if was_running:
+        subprocess.run(["pkill", "-x", "hyprsunset"], capture_output=True, timeout=5)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and is_hyprsunset_running():
+            time.sleep(0.1)
+
+    temp = _get_sunset_temp()
+    subprocess.Popen(["hyprsunset", "-t", str(temp)], env=_wayland_env())
+    return {"hyprsunset": "restarted", "was_running": was_running, "temp": temp}
+
+
 COMMANDS = {
     "git-status": {
         "name": "Git Status (all repos)",
@@ -313,6 +364,20 @@ COMMANDS = {
         "category": "power",
         "needs_confirm": True,
         "run": lambda: run_fire(["systemctl", "poweroff"]),
+    },
+    "restart-daemon": {
+        "name": "Restart Prime Daemon",
+        "description": "Restart the prime-daemon systemd service",
+        "category": "power",
+        "needs_confirm": True,
+        "run": lambda: restart_prime_daemon(),
+    },
+    "hyprsunset": {
+        "name": "Night Light",
+        "description": "Restart hyprsunset warm color filter",
+        "category": "utility",
+        "needs_confirm": False,
+        "run": lambda: restart_hyprsunset(),
     },
     "clear-trash": {
         "name": "Clear Trash",

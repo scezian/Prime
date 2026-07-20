@@ -262,6 +262,19 @@ class ApiClient {
     return (url: url, headers: {'X-Auth-Token': _token ?? ''});
   }
 
+  // ---- Remote input (touchpad/keyboard) ----
+
+  /// WebSocket endpoint for the touchpad/keyboard screen. Auth is passed as
+  /// a header at connect time, same token used for REST calls.
+  Uri get inputWsUri {
+    if (_host == null || _host!.isEmpty) {
+      throw ApiException('Prime is not configured yet. Set the laptop address in Settings.');
+    }
+    return Uri.parse('ws://$_host:8420/ws/input');
+  }
+
+  Map<String, String> get inputWsHeaders => {'X-Auth-Token': _token ?? ''};
+
   /// Builds the proxied art URL + auth header for a local file:// art path.
   /// Returns null if art shouldn't be proxied (empty, or already a direct http(s) URL).
   ({String url, Map<String, String> headers})? proxiedArtRequest(String? artUrl) {

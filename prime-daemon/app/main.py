@@ -9,14 +9,15 @@ import socket
 import time
 from datetime import timedelta
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+import json
 
-from app.auth import verify_token
+from app.auth import verify_token, verify_token_ws
 from app.commands import COMMANDS, SCREENSHOT_CACHE, is_screen_locked, unlock_screen
 from app.config import ALLOWLISTED_ROOTS
-from app import filesystem, packages, media, services, network, processes
+from app import filesystem, packages, media, services, network, processes, input_control
 import psutil
 
 app = FastAPI(title="Prime Daemon")
@@ -505,3 +506,38 @@ def keyboard_set_backlight(body: KbdBacklightBody):
         return media.set_kbd_backlight(body.level)
     except media.ControlError as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/ws/input")
+async def ws_input(websocket: WebSocket):
+    token = websocket.headers.get("x-auth-token", "")
+    if not verify_token_ws(token):
+        await websocket.close(code=4401)
+        return
+
+    await websocket.accept()
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+                mtype = msg.get("type")
+
+                if mtype == "move":
+                    input_control.move(int(msg["dx"]), int(msg["dy"]))
+                elif mtype == "scroll":
+                    input_control.scroll(int(msg["dy"]))
+                elif mtype == "click":
+                    input_control.click(msg.get("button", "left"))
+                elif mtype == "down":
+                    input_control.button_down(msg.get("button", "left"))
+                elif mtype == "up":
+                    input_control.button_up(msg.get("button", "left"))
+                elif mtype == "key":
+                    input_control.key_event(msg["code"], bool(msg["down"]))
+                elif mtype == "text":
+                    input_control.type_text(msg["text"])
+            except (KeyError, ValueError, input_control.InputError):
+                pass  # malformed/unsupported message — drop and keep the socket alive
+    except WebSocketDisconnect:
+        pass

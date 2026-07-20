@@ -4,6 +4,7 @@ import '../services/biometric_auth.dart';
 import '../services/secure_credentials.dart';
 import '../services/api_client.dart';
 import '../theme/prime_theme.dart';
+import 'touchpad_screen.dart';
 
 class ControlScreen extends StatefulWidget {
   final ApiClient apiClient;
@@ -324,29 +325,30 @@ class _ControlScreenState extends State<ControlScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            Text('PROCESSES', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+            Text('QUICK ACTIONS', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
             const SizedBox(height: 8),
-            InkWell(
-              onTap: _openProcessSheet,
-              borderRadius: BorderRadius.circular(6),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                decoration: BoxDecoration(
-                  color: PrimeColors.card,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: PrimeColors.destructive.withValues(alpha: 0.3)),
+            Row(
+              children: [
+                Expanded(
+                  child: _QuickActionTile(
+                    icon: Icons.mouse_outlined,
+                    label: 'Touchpad',
+                    color: PrimeColors.primary,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => TouchpadScreen(apiClient: widget.apiClient)),
+                    ),
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.power_settings_new, size: 16, color: PrimeColors.destructive),
-                    const SizedBox(width: 8),
-                    Text('Terminate', style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground)),
-                    const Spacer(),
-                    Icon(Icons.chevron_right, size: 16, color: PrimeColors.mutedForeground),
-                  ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _QuickActionTile(
+                    icon: Icons.power_settings_new,
+                    label: 'Terminate',
+                    color: PrimeColors.destructive,
+                    onTap: _openProcessSheet,
+                  ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
@@ -413,6 +415,54 @@ class _RadioQuickButton extends StatelessWidget {
                 activeColor: color,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact tile matching the WiFi/Bluetooth row style — used for quick
+/// actions (Touchpad, Terminate) that don't have an on/off state, just a
+/// tap target with a chevron instead of a switch.
+class _QuickActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickActionTile({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: PrimeColors.card,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Spacer(),
+            Icon(Icons.chevron_right, size: 14, color: PrimeColors.mutedForeground),
           ],
         ),
       ),
