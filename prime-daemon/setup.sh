@@ -115,6 +115,25 @@ else
     echo "[prime] All daemon CLI tools already installed."
 fi
 
+echo "[prime] Checking uinput access (needed for remote touchpad/keyboard input)..."
+UINPUT_UDEV_RULE="/etc/udev/rules.d/99-uinput.rules"
+if ! sudo test -f "$UINPUT_UDEV_RULE"; then
+    echo "[prime] Installing uinput udev rule..."
+    echo 'KERNEL=="uinput", GROUP="input", MODE="0660"' | sudo tee "$UINPUT_UDEV_RULE" &>/dev/null
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+fi
+if ! groups "$USER" | tr ' ' '\n' | grep -qx input; then
+    echo "[prime] Adding $USER to the input group..."
+    sudo usermod -aG input "$USER"
+    echo "[prime] NOTE: group membership won't take effect until you log out/in or reboot."
+    echo "[prime]       (systemd-logind's seat ACL usually grants uinput access to the"
+    echo "[prime]       active session anyway, so the daemon may work before then — if"
+    echo "[prime]       remote input doesn't work after setup, log out/in and re-check.)"
+else
+    echo "[prime] uinput access OK."
+fi
+
 echo "[prime] Ensuring trash directory exists..."
 mkdir -p ~/.prime-trash
 
@@ -233,7 +252,7 @@ flutter doctor -v
 # prime_app_dir_autodetect_marker
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRIME_APP_DIR="$(dirname "$SCRIPT_DIR")/prime_app"
-FLUTTER_PACKAGES="http shared_preferences google_fonts file_picker path_provider local_auth flutter_secure_storage"
+FLUTTER_PACKAGES="http shared_preferences google_fonts file_picker path_provider local_auth flutter_secure_storage web_socket_channel"
 
 if [ -d "$PRIME_APP_DIR" ]; then
     echo ""
