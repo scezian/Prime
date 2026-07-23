@@ -255,6 +255,22 @@ def _get_sunset_temp() -> int:
         return DEFAULT_SUNSET_TEMP
 
 
+def restart_hyprpanel() -> dict:
+    """HyprPanel runs as a systemd user service on this system (not a
+    directly-launchable binary — "hyprpanel" is only a shell alias for
+    this same systemctl call), so restart it the same way
+    restart_prime_daemon() restarts its own service."""
+    proc = subprocess.run(
+        ["systemctl", "--user", "restart", "hyprpanel.service"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"systemctl restart hyprpanel.service failed: {proc.stderr.strip()}")
+    return {"hyprpanel": "restarted"}
+
+
 def restart_hyprsunset() -> dict:
     """Kill any running hyprsunset and start a fresh instance at the
     warmth level configured in HyprPanel (matching what HyprPanel itself
@@ -374,10 +390,10 @@ COMMANDS = {
     },
     "hyprsunset": {
         "name": "Night Light",
-        "description": "Restart hyprsunset warm color filter",
+        "description": "Restart the HyprPanel app",
         "category": "utility",
         "needs_confirm": False,
-        "run": lambda: restart_hyprsunset(),
+        "run": lambda: restart_hyprpanel(),
     },
     "clear-trash": {
         "name": "Clear Trash",

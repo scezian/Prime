@@ -105,10 +105,16 @@ class _TouchpadScreenState extends State<TouchpadScreen> {
 
   @override
   void dispose() {
-    // Restore portrait + system bars when leaving — rest of the app is
-    // portrait-only and expects normal edge-to-edge behavior.
+    // Restore portrait + system bars when leaving. main.dart never sets an
+    // explicit SystemUiMode, so the rest of the app relies on the platform
+    // default (status bar + nav bar fully shown, own space reserved) rather
+    // than edgeToEdge — home_screen.dart has no SafeArea and its bottom
+    // tile gets clipped under the nav bar if we assume edgeToEdge here.
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
     _tapTimeout?.cancel();
     _channel?.sink.close(ws_status.normalClosure);
     _kbdFocusNode.dispose();
