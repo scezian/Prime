@@ -10,6 +10,8 @@ import signal
 import subprocess
 import time
 
+from app.commands import _wayland_env
+
 
 class ProcessError(Exception):
     pass
@@ -18,7 +20,11 @@ class ProcessError(Exception):
 def list_processes() -> dict:
     try:
         proc = subprocess.run(
-            ["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=10
+            ["hyprctl", "clients", "-j"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=_wayland_env(),
         )
     except FileNotFoundError:
         raise ProcessError("hyprctl not found on this system")
