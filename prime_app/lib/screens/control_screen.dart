@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/biometric_auth.dart';
+import '../widgets/liquid_confirm_button.dart';
 import '../services/secure_credentials.dart';
 import '../services/api_client.dart';
 import '../theme/prime_theme.dart';
@@ -475,7 +476,7 @@ class _QuickActionTile extends StatelessWidget {
 /// daemon's own `needs_confirm` flag per command in commands.py.
 /// `expectDaemonDeath` suppresses the error snackbar for commands where the
 /// daemon dies before it can respond (reboot/shutdown).
-class _PowerActionButton extends StatefulWidget {
+class _PowerActionButton extends StatelessWidget {
   final ApiClient apiClient;
   final String commandId;
   final String label;
@@ -493,70 +494,15 @@ class _PowerActionButton extends StatefulWidget {
   });
 
   @override
-  State<_PowerActionButton> createState() => _PowerActionButtonState();
-}
-
-class _PowerActionButtonState extends State<_PowerActionButton> {
-  bool _confirm = false;
-  bool _loading = false;
-
-  Future<void> _handleTap() async {
-    if (widget.needsConfirm && !_confirm) {
-      setState(() => _confirm = true);
-      return;
-    }
-
-    final authorized = await BiometricAuth.confirm('Confirm: ${widget.label}');
-    if (!authorized) {
-      if (mounted) setState(() => _confirm = false);
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _confirm = false;
-    });
-    try {
-      await widget.apiClient.runCommand(widget.commandId);
-    } catch (e) {
-      if (!widget.expectDaemonDeath && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: _loading ? null : _handleTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: _confirm ? PrimeColors.destructive.withValues(alpha: 0.08) : PrimeColors.card,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: PrimeColors.destructive.withValues(alpha: 0.4)),
-        ),
-        child: Column(
-          children: [
-            if (_loading)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.destructive),
-              )
-            else
-              Icon(widget.icon, size: 18, color: PrimeColors.destructive),
-            const SizedBox(height: 6),
-            Text(
-              _confirm ? 'confirm?' : widget.label,
-              style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.destructive),
-            ),
-          ],
-        ),
-      ),
+    return LiquidConfirmButton(
+      apiClient: apiClient,
+      commandId: commandId,
+      label: label,
+      icon: icon,
+      needsConfirm: needsConfirm,
+      expectDaemonDeath: expectDaemonDeath,
+      variant: LiquidButtonVariant.outlined,
     );
   }
 }
@@ -566,26 +512,17 @@ class _PowerActionButtonState extends State<_PowerActionButton> {
 /// requirement swap based on current lock state (reported by the daemon's
 /// /power/lock-status). Unlocking bypasses the OS lock screen entirely, so
 /// it always requires confirm regardless of the daemon's needs_confirm flag.
-class _LockToggleButton extends StatefulWidget {
+class _LockToggleButton extends StatelessWidget {
   final ApiClient apiClient;
   final bool? locked;
   final ValueChanged<bool> onChanged;
-
   const _LockToggleButton({
     required this.apiClient,
     required this.locked,
     required this.onChanged,
   });
 
-  @override
-  State<_LockToggleButton> createState() => _LockToggleButtonState();
-}
-
-class _LockToggleButtonState extends State<_LockToggleButton> {
-  bool _confirm = false;
-  bool _loading = false;
-
-  Future<String?> _promptForPassword() {
+  Future<String?> _promptForPassword(BuildContext context) {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -625,120 +562,44 @@ class _LockToggleButtonState extends State<_LockToggleButton> {
     );
   }
 
-  Future<void> _handleUnlock() async {
-    final authorized = await BiometricAuth.confirm('Confirm: Unlock');
-    if (!authorized) {
-      if (mounted) setState(() => _confirm = false);
-      return;
-    }
-
+  Future<void> _unlock(BuildContext context) async {
     var password = await SecureCredentials.getUnlockPassword();
     if (password == null || password.isEmpty) {
-      if (!mounted) return;
-      password = await _promptForPassword();
-      if (password == null || password.isEmpty) {
-        if (mounted) setState(() => _confirm = false);
-        return;
-      }
+      if (!context.mounted) return;
+      password = await _promptForPassword(context);
+      if (password == null || password.isEmpty) return;
       await SecureCredentials.setUnlockPassword(password);
     }
-
-    setState(() {
-      _loading = true;
-      _confirm = false;
-    });
-    try {
-      final res = await widget.apiClient.unlockScreen(password);
-      final unlocked = res['unlocked'] == true;
-      if (unlocked) {
-        widget.onChanged(false);
-      } else if (mounted) {
-        // Not auto-clearing the saved password here: the daemon can't
-        // reliably tell "wrong password" apart from "hyprlock hadn't
-        // exited yet", so treating every failure as a bad password and
-        // deleting it was too aggressive. Update it from Settings if it
-        // actually is wrong.
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unlock failed — try again, or update the password in Settings')),
-        );
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    final res = await apiClient.unlockScreen(password);
+    final unlocked = res['unlocked'] == true;
+    if (unlocked) {
+      onChanged(false);
+    } else if (context.mounted) {
+      // Not auto-clearing the saved password here: the daemon can't
+      // reliably tell "wrong password" apart from "hyprlock hadn't
+      // exited yet", so treating every failure as a bad password and
+      // deleting it was too aggressive. Update it from Settings if it
+      // actually is wrong.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock failed — try again, or update the password in Settings')),
+      );
     }
   }
 
-  Future<void> _handleLock() async {
-    final authorized = await BiometricAuth.confirm('Confirm: Lock');
-    if (!authorized) {
-      if (mounted) setState(() => _confirm = false);
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _confirm = false;
-    });
-    try {
-      await widget.apiClient.runCommand('lock-screen');
-      widget.onChanged(true);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _handleTap() async {
-    final isLocked = widget.locked ?? false;
-
-    if (!_confirm) {
-      setState(() => _confirm = true);
-      return;
-    }
-
-    if (isLocked) {
-      await _handleUnlock();
-    } else {
-      await _handleLock();
-    }
+  Future<void> _lock(BuildContext context) async {
+    await apiClient.runCommand('lock-screen');
+    onChanged(true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLocked = widget.locked ?? false;
-    final icon = isLocked ? Icons.lock_open : Icons.lock_outline;
-    final label = isLocked ? 'Unlock' : 'Lock';
-
-    return InkWell(
-      onTap: _loading ? null : _handleTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: _confirm ? PrimeColors.destructive.withValues(alpha: 0.08) : PrimeColors.card,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: PrimeColors.destructive.withValues(alpha: 0.4)),
-        ),
-        child: Column(
-          children: [
-            if (_loading)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.destructive),
-              )
-            else
-              Icon(icon, size: 18, color: PrimeColors.destructive),
-            const SizedBox(height: 6),
-            Text(
-              _confirm ? 'confirm?' : label,
-              style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.destructive),
-            ),
-          ],
-        ),
-      ),
+    final isLocked = locked ?? false;
+    return LiquidConfirmButton(
+      key: ValueKey(isLocked),
+      label: isLocked ? 'Unlock' : 'Lock',
+      icon: isLocked ? Icons.lock_open : Icons.lock_outline,
+      onConfirmed: (ctx) => isLocked ? _unlock(ctx) : _lock(ctx),
+      variant: LiquidButtonVariant.outlined,
     );
   }
 }

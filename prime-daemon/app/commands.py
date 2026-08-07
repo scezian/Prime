@@ -14,7 +14,7 @@ from pathlib import Path
 PROJECTS_DIR = Path.home() / "Projects"
 
 MUSIC_DIR = Path.home() / "Music"
-NOCTURNE_TRACK = MUSIC_DIR / "Leave It All To Sink Into Heavy Rain And Thunderstorms - Relax And Sleep In Cozy Car.m4a"
+NOCTURNE_TRACK = MUSIC_DIR / "🔴 Relaxing Rain Sounds on Tin Roof for Deep Sleep, Rain Sounds for Sleeping, Heavy Rain and Thunder.m4a"
 
 
 def scan_git_status() -> dict:

@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/biometric_auth.dart';
+import '../widgets/liquid_confirm_button.dart';
+import '../widgets/marquee_text.dart';
+import '../widgets/shimmer_sweep.dart';
 import '../services/secure_credentials.dart';
 import '../services/api_client.dart';
 import '../theme/prime_theme.dart';
@@ -11,6 +14,11 @@ import 'files_screen.dart';
 import 'packages_screen.dart';
 import 'settings_screen.dart';
 import 'commands_screen.dart';
+
+/// Flip this and hot-reload to compare glass treatments on the power/lock
+/// buttons: GlassStyle.frosted (blurred, translucent, subtle red tint) vs
+/// GlassStyle.gradient (soft red-to-dark diagonal gradient, no blur).
+const _kPowerButtonGlassStyle = GlassStyle.frosted;
 
 class HomeScreen extends StatefulWidget {
   final ApiClient apiClient;
@@ -27,18 +35,23 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   bool? _locked;
   Timer? _lockPollTimer;
+  Map<String, dynamic>? _nowPlaying;
+  Timer? _mediaPollTimer;
 
   @override
   void initState() {
     super.initState();
     _refresh();
     _pollLockStatus();
+    _pollNowPlaying();
     _lockPollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollLockStatus());
+    _mediaPollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollNowPlaying());
   }
 
   @override
   void dispose() {
     _lockPollTimer?.cancel();
+    _mediaPollTimer?.cancel();
     super.dispose();
   }
 
@@ -75,6 +88,43 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _locked = res['locked'] as bool);
     } catch (_) {
       // best-effort, ignore
+    }
+  }
+  Future<void> _pollNowPlaying() async {
+    if (!widget.apiClient.isConfigured) return;
+    try {
+      final playing = await widget.apiClient.getNowPlaying();
+      if (!mounted) return;
+      setState(() => _nowPlaying = playing);
+    } catch (_) {
+      // best-effort, ignore
+    }
+  }
+  Future<void> _mediaPlayPause() async {
+    try {
+      await widget.apiClient.mediaPlayPause();
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _pollNowPlaying();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+  Future<void> _mediaNext() async {
+    try {
+      await widget.apiClient.mediaNext();
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _pollNowPlaying();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+  Future<void> _mediaPrevious() async {
+    try {
+      await widget.apiClient.mediaPrevious();
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _pollNowPlaying();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -178,67 +228,90 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             if (_status != null) ...[
               // PRIME_OVERVIEW_CARD_REMOVED
-              Text('POWER', style: PrimeTheme.text(fontSize: 11, fontWeight: FontWeight.w700, color: PrimeColors.prime400, letterSpacing: 1.8)),
-              const SizedBox(height: 10),
-              Row(
+              SizedBox(
+                height: 118, // 54 (button row) + 10 (gap) + 54 (button row)
+                child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
-                    child: _LockToggleButton(
+                    child: _MiniNowPlayingCard(
                       apiClient: widget.apiClient,
-                      locked: _locked,
-                      onChanged: (v) => setState(() => _locked = v),
+                      nowPlaying: _nowPlaying,
+                      onPlayPause: _mediaPlayPause,
+                      onNext: _mediaNext,
+                      onPrevious: _mediaPrevious,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _PowerActionButton(
-                      apiClient: widget.apiClient,
-                      commandId: 'logout',
-                      label: 'Log Out',
-                      icon: Icons.logout,
-                      needsConfirm: true,
-                    ),
+                  const SizedBox(width: 10),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 54,
+                            height: 54,
+                            child: _LockToggleButton(
+                              apiClient: widget.apiClient,
+                              locked: _locked,
+                              onChanged: (v) => setState(() => _locked = v),
+                              showLabel: false,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 54,
+                            height: 54,
+                            child: _PowerActionButton(
+                              apiClient: widget.apiClient,
+                              commandId: 'logout',
+                              label: 'Log Out',
+                              icon: Icons.logout,
+                              needsConfirm: true,
+                              showLabel: false,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 54,
+                            height: 54,
+                            child: _PowerActionButton(
+                              apiClient: widget.apiClient,
+                              commandId: 'reboot',
+                              label: 'Restart',
+                              icon: Icons.restart_alt,
+                              needsConfirm: true,
+                              expectDaemonDeath: true,
+                              showLabel: false,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 54,
+                            height: 54,
+                            child: _PowerActionButton(
+                              apiClient: widget.apiClient,
+                              commandId: 'shutdown',
+                              label: 'Shutdown',
+                              icon: Icons.power_settings_new,
+                              needsConfirm: true,
+                              expectDaemonDeath: true,
+                              showLabel: false,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: _PowerActionButton(
-                      apiClient: widget.apiClient,
-                      commandId: 'reboot',
-                      label: 'Restart',
-                      icon: Icons.restart_alt,
-                      needsConfirm: true,
-                      expectDaemonDeath: true,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _PowerActionButton(
-                      apiClient: widget.apiClient,
-                      commandId: 'shutdown',
-                      label: 'Shutdown',
-                      icon: Icons.power_settings_new,
-                      needsConfirm: true,
-                      expectDaemonDeath: true,
-                    ),
-                  ),
-                ],
               ),
             ],
-            const SizedBox(height: 22),
-            Text(
-              'MANAGE',
-              style: PrimeTheme.text(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: PrimeColors.prime400,
-                letterSpacing: 1.8,
-              ),
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 18),
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
@@ -311,78 +384,81 @@ class _ActionTileState extends State<_ActionTile> {
             boxShadow: PrimeShadows.tile,
           ),
           clipBehavior: Clip.antiAlias,
-          child: Stack(
-            children: [
-              // Corner glow blobs, matching the bolt.new FeatureTiles decoration.
-              Positioned(
-                right: -28,
-                top: -28,
-                child: Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)),
+          child: ShimmerSweep(
+            period: const Duration(seconds: 4),
+            child: Stack(
+              children: [
+                // Corner glow blobs, matching the bolt.new FeatureTiles decoration.
+                Positioned(
+                  right: -28,
+                  top: -28,
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)),
+                  ),
                 ),
-              ),
-              Positioned(
-                left: -24,
-                bottom: -36,
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.05)),
+                Positioned(
+                  left: -24,
+                  bottom: -36,
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.05)),
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(16),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Icon(item.icon, size: 22, color: Colors.white),
                           ),
-                          child: Icon(item.icon, size: 22, color: Colors.white),
-                        ),
-                        if (item.stat != null)
-                          Flexible(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                item.stat!,
-                                overflow: TextOverflow.ellipsis,
-                                style: PrimeTheme.text(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
+                          if (item.stat != null)
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  item.stat!,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: PrimeTheme.text(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
+                                ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      item.label,
-                      overflow: TextOverflow.ellipsis,
-                      style: PrimeTheme.text(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.subtitle,
-                      overflow: TextOverflow.ellipsis,
-                      style: PrimeTheme.text(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.72)),
-                    ),
-                  ],
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        item.label,
+                        overflow: TextOverflow.ellipsis,
+                        style: PrimeTheme.text(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        item.subtitle,
+                        overflow: TextOverflow.ellipsis,
+                        style: PrimeTheme.text(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.72)),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -578,19 +654,224 @@ class _StatTile extends StatelessWidget {
   }
 }
 
+/// Mini now-playing card: track art, marquee title/artist, progress bar,
+/// and transport controls. Stateful so it can drive its own slow gradient
+/// sweep + shimmer while something is actively playing.
+class _MiniNowPlayingCard extends StatefulWidget {
+  final ApiClient apiClient;
+  final Map<String, dynamic>? nowPlaying;
+  final VoidCallback onPlayPause;
+  final VoidCallback onNext;
+  final VoidCallback onPrevious;
+
+  const _MiniNowPlayingCard({
+    required this.apiClient,
+    required this.nowPlaying,
+    required this.onPlayPause,
+    required this.onNext,
+    required this.onPrevious,
+  });
+
+  @override
+  State<_MiniNowPlayingCard> createState() => _MiniNowPlayingCardState();
+}
+
+class _MiniNowPlayingCardState extends State<_MiniNowPlayingCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _gradientCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _gradientCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _gradientCtrl.dispose();
+    super.dispose();
+  }
+
+  Widget _buildArt(String? artUrl) {
+    const size = 40.0;
+    final proxied = widget.apiClient.proxiedArtRequest(artUrl);
+
+    Widget fallback = Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Icon(Icons.music_note, color: Colors.white, size: 18),
+    );
+
+    ImageProvider? provider;
+    if (proxied != null) {
+      provider = NetworkImage(proxied.url, headers: proxied.headers);
+    } else if (artUrl != null && artUrl.startsWith('http')) {
+      provider = NetworkImage(artUrl);
+    }
+    if (provider == null) return fallback;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image(
+        image: provider,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => fallback,
+      ),
+    );
+  }
+
+  Widget _miniControl(IconData icon, VoidCallback onTap, {bool filled = false}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: EdgeInsets.all(filled ? 5 : 4),
+        child: filled
+            ? Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: Icon(icon, size: 14, color: PrimeColors.prime700),
+              )
+            : Icon(icon, size: 17, color: Colors.white.withValues(alpha: 0.85)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nowPlaying = widget.nowPlaying;
+    final active = nowPlaying?['active'] == true;
+    final playing = nowPlaying?['status'] == 'Playing';
+
+    return AnimatedBuilder(
+      animation: _gradientCtrl,
+      builder: (context, _) {
+        final t = _gradientCtrl.value;
+        final begin = Alignment.lerp(Alignment.topLeft, Alignment.topRight, t)!;
+        final end = Alignment.lerp(Alignment.bottomRight, Alignment.bottomLeft, t)!;
+
+        return Container(
+          padding: EdgeInsets.symmetric(horizontal: active ? 12 : 10, vertical: active ? 10 : 8),
+          decoration: BoxDecoration(
+            gradient: active
+                ? LinearGradient(begin: begin, end: end, colors: [PrimeColors.prime600, PrimeColors.prime800])
+                : null,
+            color: active ? null : PrimeColors.card,
+            borderRadius: BorderRadius.circular(22),
+            border: active ? null : Border.all(color: PrimeColors.border),
+            boxShadow: active ? PrimeShadows.tile : null,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: ShimmerSweep(
+            active: active,
+            period: const Duration(seconds: 4),
+            child: !active
+                ? Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.music_off, size: 13, color: PrimeColors.mutedForeground),
+                        const SizedBox(width: 6),
+                        Text('nothing playing', style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground)),
+                      ],
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      Positioned(
+                        right: -22,
+                        top: -22,
+                        child: Container(
+                          width: 70,
+                          height: 70,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)),
+                        ),
+                      ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              _buildArt(nowPlaying!['art_url'] as String?),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    MarqueeText(
+                                      text: (nowPlaying['title'] as String?)?.isNotEmpty == true
+                                          ? nowPlaying['title'] as String
+                                          : 'unknown title',
+                                      style: PrimeTheme.text(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                                    ),
+                                    Text(
+                                      [nowPlaying['artist'], nowPlaying['album']]
+                                          .where((s) => s != null && (s as String).isNotEmpty)
+                                          .join(' — '),
+                                      style: PrimeTheme.mono(fontSize: 9, color: Colors.white.withValues(alpha: 0.75)),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          if ((nowPlaying['duration_seconds'] as int? ?? 0) > 0)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(3),
+                                child: LinearProgressIndicator(
+                                  value: (nowPlaying['position_seconds'] as int) / (nowPlaying['duration_seconds'] as int),
+                                  minHeight: 3,
+                                  backgroundColor: Colors.white.withValues(alpha: 0.22),
+                                  valueColor: const AlwaysStoppedAnimation(Colors.white),
+                                ),
+                              ),
+                            )
+                          else
+                            const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _miniControl(Icons.skip_previous, widget.onPrevious),
+                              _miniControl(playing ? Icons.pause : Icons.play_arrow, widget.onPlayPause, filled: true),
+                              _miniControl(Icons.skip_next, widget.onNext),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Generic confirm(-optional) + biometric + fire power action button, used
 /// for Log Out, Restart, and Shutdown. Mirrors the daemon's own
 /// `needs_confirm` flag per command in commands.py.
 /// `expectDaemonDeath` suppresses the error snackbar for commands where the
 /// daemon dies before it can respond (reboot/shutdown).
-class _PowerActionButton extends StatefulWidget {
+class _PowerActionButton extends StatelessWidget {
   final ApiClient apiClient;
   final String commandId;
   final String label;
   final IconData icon;
   final bool needsConfirm;
   final bool expectDaemonDeath;
-
+  final bool showLabel;
   const _PowerActionButton({
     required this.apiClient,
     required this.commandId,
@@ -598,83 +879,24 @@ class _PowerActionButton extends StatefulWidget {
     required this.icon,
     required this.needsConfirm,
     this.expectDaemonDeath = false,
+    this.showLabel = true,
   });
 
   @override
-  State<_PowerActionButton> createState() => _PowerActionButtonState();
-}
-
-class _PowerActionButtonState extends State<_PowerActionButton> {
-  bool _confirm = false;
-  bool _loading = false;
-
-  Future<void> _handleTap() async {
-    if (widget.needsConfirm && !_confirm) {
-      setState(() => _confirm = true);
-      return;
-    }
-
-    final authorized = await BiometricAuth.confirm('Confirm: ${widget.label}');
-    if (!authorized) {
-      if (mounted) setState(() => _confirm = false);
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _confirm = false;
-    });
-    try {
-      await widget.apiClient.runCommand(widget.commandId);
-    } catch (e) {
-      if (!widget.expectDaemonDeath && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final bg = _confirm ? const Color(0xFFB91C1C) : PrimeColors.destructive;
-    return InkWell(
-      onTap: _loading ? null : _handleTap,
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: bg.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (_loading)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              )
-            else
-              Icon(widget.icon, size: 17, color: Colors.white),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                _confirm ? 'Confirm?' : widget.label,
-                overflow: TextOverflow.ellipsis,
-                style: PrimeTheme.text(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return LiquidConfirmButton(
+      apiClient: apiClient,
+      commandId: commandId,
+      label: label,
+      icon: icon,
+      needsConfirm: needsConfirm,
+      expectDaemonDeath: expectDaemonDeath,
+      variant: LiquidButtonVariant.filled,
+      showLabel: showLabel,
+      glassStyle: _kPowerButtonGlassStyle,
     );
   }
 }
-
 /// Lock/Unlock toggle. Locking uses the existing fire-and-forget
 /// `lock-screen` command. Unlocking sends your stored laptop password to
 /// the daemon, which types it into the running hyprlock prompt so
@@ -682,26 +904,20 @@ class _PowerActionButtonState extends State<_PowerActionButton> {
 /// physical keystroke takes. The password lives only in this device's
 /// secure storage (Android Keystore-backed) and is sent fresh per
 /// request; the daemon never writes it to disk.
-class _LockToggleButton extends StatefulWidget {
+class _LockToggleButton extends StatelessWidget {
   final ApiClient apiClient;
   final bool? locked;
   final ValueChanged<bool> onChanged;
+  final bool showLabel;
 
   const _LockToggleButton({
     required this.apiClient,
     required this.locked,
     required this.onChanged,
+    this.showLabel = true,
   });
 
-  @override
-  State<_LockToggleButton> createState() => _LockToggleButtonState();
-}
-
-class _LockToggleButtonState extends State<_LockToggleButton> {
-  bool _confirm = false;
-  bool _loading = false;
-
-  Future<String?> _promptForPassword() {
+  Future<String?> _promptForPassword(BuildContext context) {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
@@ -741,122 +957,41 @@ class _LockToggleButtonState extends State<_LockToggleButton> {
     );
   }
 
-  Future<void> _handleUnlock() async {
-    final authorized = await BiometricAuth.confirm('Confirm: Unlock');
-    if (!authorized) {
-      if (mounted) setState(() => _confirm = false);
-      return;
-    }
-
+  Future<void> _unlock(BuildContext context) async {
     var password = await SecureCredentials.getUnlockPassword();
     if (password == null || password.isEmpty) {
-      if (!mounted) return;
-      password = await _promptForPassword();
-      if (password == null || password.isEmpty) {
-        if (mounted) setState(() => _confirm = false);
-        return;
-      }
+      if (!context.mounted) return;
+      password = await _promptForPassword(context);
+      if (password == null || password.isEmpty) return;
       await SecureCredentials.setUnlockPassword(password);
     }
-
-    setState(() {
-      _loading = true;
-      _confirm = false;
-    });
-    try {
-      final res = await widget.apiClient.unlockScreen(password);
-      final unlocked = res['unlocked'] == true;
-      if (unlocked) {
-        widget.onChanged(false);
-      } else if (mounted) {
-        await SecureCredentials.clearUnlockPassword();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unlock failed — check the password and try again')),
-        );
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    final res = await apiClient.unlockScreen(password);
+    final unlocked = res['unlocked'] == true;
+    if (unlocked) {
+      onChanged(false);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unlock failed — check the password and try again')),
+      );
     }
   }
 
-  Future<void> _handleLock() async {
-    final authorized = await BiometricAuth.confirm('Confirm: Lock');
-    if (!authorized) {
-      if (mounted) setState(() => _confirm = false);
-      return;
-    }
-
-    setState(() {
-      _loading = true;
-      _confirm = false;
-    });
-    try {
-      await widget.apiClient.runCommand('lock-screen');
-      widget.onChanged(true);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _handleTap() async {
-    final isLocked = widget.locked ?? false;
-
-    if (!_confirm) {
-      setState(() => _confirm = true);
-      return;
-    }
-
-    if (isLocked) {
-      await _handleUnlock();
-    } else {
-      await _handleLock();
-    }
+  Future<void> _lock(BuildContext context) async {
+    await apiClient.runCommand('lock-screen');
+    onChanged(true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLocked = widget.locked ?? false;
-    final icon = isLocked ? Icons.lock_open : Icons.lock_outline;
-    final label = isLocked ? 'Unlock' : 'Lock';
-
-    final bg = _confirm ? const Color(0xFFB91C1C) : PrimeColors.destructive;
-    return InkWell(
-      onTap: _loading ? null : _handleTap,
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: bg.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (_loading)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              )
-            else
-              Icon(icon, size: 17, color: Colors.white),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                _confirm ? 'Confirm?' : label,
-                overflow: TextOverflow.ellipsis,
-                style: PrimeTheme.text(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
+    final isLocked = locked ?? false;
+    return LiquidConfirmButton(
+      key: ValueKey(isLocked),
+      label: isLocked ? 'Unlock' : 'Lock',
+      icon: isLocked ? Icons.lock_open : Icons.lock_outline,
+      onConfirmed: (ctx) => isLocked ? _unlock(ctx) : _lock(ctx),
+      variant: LiquidButtonVariant.filled,
+      showLabel: showLabel,
+      glassStyle: _kPowerButtonGlassStyle,
     );
   }
 }
