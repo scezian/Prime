@@ -23,15 +23,40 @@ def _run(cmd: list[str], timeout: int = 8) -> subprocess.CompletedProcess:
 _METADATA_FORMAT = "{{title}}\t{{artist}}\t{{album}}\t{{position}}\t{{mpris:length}}\t{{mpris:artUrl}}"
 
 
-def now_playing() -> dict:
-    status_proc = _run(["playerctl", "status"])
+def list_players() -> list[str]:
+    """Names of all currently running MPRIS players (e.g. 'spotify',
+    'chromium.instance_1_2381'), in playerctl's own priority order."""
+    proc = _run(["playerctl", "-l"])
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return []
+    return [line.strip() for line in proc.stdout.strip("\n").split("\n") if line.strip()]
+
+
+def _source_label(player: str) -> str:
+    """Best-effort human-readable label derived from a playerctl player name."""
+    base = player.split(".")[0]
+    return base.replace("_", " ").replace("-", " ").title()
+
+
+def now_playing(player: str | None = None) -> dict:
+    cmd_status = ["playerctl"]
+    if player:
+        cmd_status += ["-p", player]
+    cmd_status.append("status")
+
+    status_proc = _run(cmd_status)
     if status_proc.returncode != 0:
         # No player running / no MPRIS source active.
         return {"active": False}
 
     status = status_proc.stdout.strip()
 
-    meta_proc = _run(["playerctl", "metadata", "--format", _METADATA_FORMAT])
+    cmd_meta = ["playerctl"]
+    if player:
+        cmd_meta += ["-p", player]
+    cmd_meta += ["metadata", "--format", _METADATA_FORMAT]
+
+    meta_proc = _run(cmd_meta)
     title, artist, album, position_us, length_us, art_url = "", "", "", "0", "0", ""
     if meta_proc.returncode == 0 and meta_proc.stdout.strip():
         parts = meta_proc.stdout.strip("\n").split("\t")
@@ -46,6 +71,8 @@ def now_playing() -> dict:
 
     return {
         "active": True,
+        "player": player,
+        "source": _source_label(player) if player else None,
         "status": status,  # "Playing" | "Paused" | "Stopped"
         "title": title,
         "artist": artist,
@@ -56,18 +83,41 @@ def now_playing() -> dict:
     }
 
 
-def play_pause() -> dict:
-    proc = _run(["playerctl", "play-pause"])
+def list_now_playing() -> list[dict]:
+    """now_playing() for every currently active MPRIS player, skipping any
+    that report inactive between the -l listing and the per-player query."""
+    results = []
+    for player in list_players():
+        info = now_playing(player)
+        if info.get("active"):
+            results.append(info)
+    return results
+
+
+def play_pause(player: str | None = None) -> dict:
+    cmd = ["playerctl"]
+    if player:
+        cmd += ["-p", player]
+    cmd.append("play-pause")
+    proc = _run(cmd)
     return {"ok": proc.returncode == 0}
 
 
-def next_track() -> dict:
-    proc = _run(["playerctl", "next"])
+def next_track(player: str | None = None) -> dict:
+    cmd = ["playerctl"]
+    if player:
+        cmd += ["-p", player]
+    cmd.append("next")
+    proc = _run(cmd)
     return {"ok": proc.returncode == 0}
 
 
-def previous_track() -> dict:
-    proc = _run(["playerctl", "previous"])
+def previous_track(player: str | None = None) -> dict:
+    cmd = ["playerctl"]
+    if player:
+        cmd += ["-p", player]
+    cmd.append("previous")
+    proc = _run(cmd)
     return {"ok": proc.returncode == 0}
 
 

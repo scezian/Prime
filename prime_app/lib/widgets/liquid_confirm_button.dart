@@ -57,9 +57,9 @@ class LiquidConfirmButton extends StatefulWidget {
     this.showLabel = true,
     this.glassStyle = GlassStyle.frosted,
   }) : assert(
-          onConfirmed != null || (apiClient != null && commandId != null),
-          'LiquidConfirmButton needs either onConfirmed, or both apiClient and commandId',
-        );
+         onConfirmed != null || (apiClient != null && commandId != null),
+         'LiquidConfirmButton needs either onConfirmed, or both apiClient and commandId',
+       );
 
   @override
   State<LiquidConfirmButton> createState() => _LiquidConfirmButtonState();
@@ -82,7 +82,10 @@ class _LiquidConfirmButtonState extends State<LiquidConfirmButton>
   void initState() {
     super.initState();
     _fillCtrl = AnimationController(vsync: this, duration: _fillDuration);
-    _waveCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+    _waveCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
     _rippleCtrl = AnimationController(vsync: this, duration: _rippleDuration);
     _fillCtrl.addStatusListener((status) {
       if (status == AnimationStatus.completed) _onFilled();
@@ -132,7 +135,9 @@ class _LiquidConfirmButtonState extends State<LiquidConfirmButton>
       }
     } catch (e) {
       if (!widget.expectDaemonDeath && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     } finally {
       if (mounted) {
@@ -198,10 +203,17 @@ class _LiquidConfirmButtonState extends State<LiquidConfirmButton>
                     SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: borderColor),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: borderColor,
+                      ),
                     )
                   else
-                    Icon(_verifying ? Icons.fingerprint : widget.icon, size: 18, color: borderColor),
+                    Icon(
+                      _verifying ? Icons.fingerprint : widget.icon,
+                      size: 18,
+                      color: borderColor,
+                    ),
                   const SizedBox(height: 6),
                   Text(
                     _verifying ? 'verify' : widget.label,
@@ -229,103 +241,121 @@ class _LiquidConfirmButtonState extends State<LiquidConfirmButton>
       curve: Curves.easeOut,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: ShimmerSweep(
-          active: !_loading,
-          period: const Duration(seconds: 3),
-          child: Stack(
-            children: [
-              if (glass == GlassStyle.frosted)
-                Positioned.fill(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                    child: const SizedBox.expand(),
-                  ),
-                ),
+        child: Stack(
+          children: [
+            if (glass == GlassStyle.frosted)
               Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: glass == GlassStyle.frosted ? Colors.white.withValues(alpha: 0.08) : null,
-                    gradient: glass == GlassStyle.gradient
-                        ? LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              bgColor.withValues(alpha: 0.55),
-                              PrimeColors.card.withValues(alpha: 0.92),
-                            ],
-                          )
-                        : null,
-                    border: Border.all(color: bgColor.withValues(alpha: 0.45), width: 1),
-                    boxShadow: [
-                      BoxShadow(
-                        color: bgColor.withValues(alpha: _pressed ? 0.5 : 0.24),
-                        blurRadius: _pressed ? 22 : 10,
-                        spreadRadius: _pressed ? 1 : 0,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                  child: const SizedBox.expand(),
                 ),
               ),
-              // Diagonal glass sheen -- a fixed highlight (distinct from
-              // the moving ShimmerSweep band) so the surface reads as
-              // curved glass even while idle.
-              const Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0x1AFFFFFF), Colors.transparent],
-                        stops: [0.0, 0.55],
-                      ),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: glass == GlassStyle.frosted
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : null,
+                  gradient: glass == GlassStyle.gradient
+                      ? LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            bgColor.withValues(alpha: 0.55),
+                            PrimeColors.card.withValues(alpha: 0.92),
+                          ],
+                        )
+                      : null,
+                  border: Border.all(
+                    color: bgColor.withValues(alpha: 0.45),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: bgColor.withValues(alpha: _pressed ? 0.5 : 0.24),
+                      blurRadius: _pressed ? 22 : 10,
+                      spreadRadius: _pressed ? 1 : 0,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Diagonal glass sheen -- a fixed highlight (distinct from
+            // the moving ShimmerSweep band) so the surface reads as
+            // curved glass even while idle.
+            const Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0x1AFFFFFF), Colors.transparent],
+                      stops: [0.0, 0.55],
                     ),
                   ),
                 ),
               ),
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _LiquidWavePainter(fill: fill, phase: _waveCtrl.value * 2 * math.pi),
+            ),
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _LiquidWavePainter(
+                  fill: fill,
+                  phase: _waveCtrl.value * 2 * math.pi,
                 ),
               ),
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _RipplePainter(progress: _rippleCtrl.value, color: Colors.white),
+            ),
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _RipplePainter(
+                  progress: _rippleCtrl.value,
+                  color: Colors.white,
                 ),
               ),
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (_loading)
-                        const SizedBox(
-                          width: 13,
-                          height: 13,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      else
-                        Icon(_verifying ? Icons.fingerprint : widget.icon, size: 18, color: Colors.white),
-                      if (widget.showLabel) ...[
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            _verifying ? 'Verify' : widget.label,
-                            overflow: TextOverflow.ellipsis,
-                            style: PrimeTheme.text(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+            ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (_loading)
+                      const SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    else
+                      Icon(
+                        _verifying ? Icons.fingerprint : widget.icon,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    if (widget.showLabel) ...[
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          _verifying ? 'Verify' : widget.label,
+                          overflow: TextOverflow.ellipsis,
+                          style: PrimeTheme.text(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
                           ),
                         ),
-                      ],
+                      ),
                     ],
-                  ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -346,7 +376,8 @@ class _RipplePainter extends CustomPainter {
     if (progress <= 0 || progress >= 1) return;
     final maxRadius = size.longestSide * 0.9;
     final radius = maxRadius * Curves.easeOut.transform(progress);
-    final paint = Paint()..color = color.withValues(alpha: (1 - progress) * 0.35);
+    final paint = Paint()
+      ..color = color.withValues(alpha: (1 - progress) * 0.35);
     canvas.drawCircle(size.center(Offset.zero), radius, paint);
   }
 
@@ -375,14 +406,23 @@ class _LiquidWavePainter extends CustomPainter {
     this.opacityFront = 0.54,
   });
 
-  List<Offset> _crestPoints(Size size, double levelY, double amp, double phaseOffset, double sway) {
+  List<Offset> _crestPoints(
+    Size size,
+    double levelY,
+    double amp,
+    double phaseOffset,
+    double sway,
+  ) {
     final w = size.width;
     const n = 8;
     final pts = <Offset>[];
     for (int i = 0; i <= n; i++) {
       final x = w / n * i;
       final edgeDamp = math.sin((x / w) * math.pi);
-      final y = levelY - amp * edgeDamp * math.sin(phaseOffset + i * 0.9) - sway * edgeDamp;
+      final y =
+          levelY -
+          amp * edgeDamp * math.sin(phaseOffset + i * 0.9) -
+          sway * edgeDamp;
       pts.add(Offset(x, y));
     }
     return pts;
@@ -419,10 +459,18 @@ class _LiquidWavePainter extends CustomPainter {
     final swayFront = math.sin(phase * 1.55 + 1.2) * 2.6 * settle;
 
     final backPts = _crestPoints(size, levelY, amp * 0.7, phase * 1.1, sway);
-    final frontPts = _crestPoints(size, levelY, amp, phase * 1.7 + 1.5, swayFront);
+    final frontPts = _crestPoints(
+      size,
+      levelY,
+      amp,
+      phase * 1.7 + 1.5,
+      swayFront,
+    );
 
-    final backPaint = Paint()..color = waterColor.withValues(alpha: opacityBack);
-    final frontPaint = Paint()..color = waterColor.withValues(alpha: opacityFront);
+    final backPaint = Paint()
+      ..color = waterColor.withValues(alpha: opacityBack);
+    final frontPaint = Paint()
+      ..color = waterColor.withValues(alpha: opacityFront);
     final highlightPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.25 + 0.45 * settle)
       ..style = PaintingStyle.stroke
@@ -435,5 +483,6 @@ class _LiquidWavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _LiquidWavePainter old) => old.fill != fill || old.phase != phase;
+  bool shouldRepaint(covariant _LiquidWavePainter old) =>
+      old.fill != fill || old.phase != phase;
 }

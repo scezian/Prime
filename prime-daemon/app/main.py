@@ -304,33 +304,45 @@ def packages_job_status(job_id: str):
 # ---- Media / Volume ----
 
 @app.get("/media/now-playing", dependencies=[Depends(verify_token)])
-def media_now_playing():
+def media_now_playing(player: str | None = None):
     try:
-        return media.now_playing()
+        return media.now_playing(player)
     except media.ControlError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/media/play-pause", dependencies=[Depends(verify_token)])
-def media_play_pause():
+@app.get("/media/players", dependencies=[Depends(verify_token)])
+def media_players():
     try:
-        return media.play_pause()
+        return media.list_now_playing()
+    except media.ControlError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PlayerBody(BaseModel):
+    player: str | None = None
+
+
+@app.post("/media/play-pause", dependencies=[Depends(verify_token)])
+def media_play_pause(body: PlayerBody = PlayerBody()):
+    try:
+        return media.play_pause(body.player)
     except media.ControlError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/media/next", dependencies=[Depends(verify_token)])
-def media_next():
+def media_next(body: PlayerBody = PlayerBody()):
     try:
-        return media.next_track()
+        return media.next_track(body.player)
     except media.ControlError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/media/previous", dependencies=[Depends(verify_token)])
-def media_previous():
+def media_previous(body: PlayerBody = PlayerBody()):
     try:
-        return media.previous_track()
+        return media.previous_track(body.player)
     except media.ControlError as e:
         raise HTTPException(status_code=500, detail=str(e))
 

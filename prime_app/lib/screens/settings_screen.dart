@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../theme/prime_theme.dart';
+import '../widgets/prime_card.dart';
 import 'settings/connection_settings_screen.dart';
 import 'settings/security_settings_screen.dart';
 import 'settings/theme_settings_screen.dart';
@@ -11,7 +12,11 @@ class SettingsScreen extends StatelessWidget {
   final ApiClient apiClient;
   final VoidCallback onSaved;
 
-  const SettingsScreen({super.key, required this.apiClient, required this.onSaved});
+  const SettingsScreen({
+    super.key,
+    required this.apiClient,
+    required this.onSaved,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +31,10 @@ class SettingsScreen extends StatelessWidget {
             subtitle: 'Tailscale address & auth token',
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => ConnectionSettingsScreen(apiClient: apiClient, onSaved: onSaved),
+                builder: (_) => ConnectionSettingsScreen(
+                  apiClient: apiClient,
+                  onSaved: onSaved,
+                ),
               ),
             ),
           ),
@@ -69,41 +77,50 @@ class _SettingsMenuTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return PrimeCard(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          color: PrimeColors.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: PrimeColors.border),
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                gradient: PrimeGradients.tileA,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, size: 20, color: Colors.white),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              gradient: PrimeGradients.tileA,
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: PrimeTheme.text(fontSize: 15, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: PrimeTheme.text(fontSize: 11, color: PrimeColors.mutedForeground)),
-                ],
-              ),
+            child: Icon(icon, size: 20, color: Colors.white),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: PrimeTheme.text(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: PrimeTheme.text(
+                    fontSize: 11,
+                    color: PrimeColors.mutedForeground,
+                  ),
+                ),
+              ],
             ),
-            Icon(Icons.chevron_right, size: 20, color: PrimeColors.mutedForeground),
-          ],
-        ),
+          ),
+          Icon(
+            Icons.chevron_right,
+            size: 20,
+            color: PrimeColors.mutedForeground,
+          ),
+        ],
       ),
     );
   }

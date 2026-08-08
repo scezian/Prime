@@ -36,24 +36,33 @@ class ApiClient {
     _token = token;
   }
 
-  bool get isConfigured => _host != null && _host!.isNotEmpty && _token != null && _token!.isNotEmpty;
+  bool get isConfigured =>
+      _host != null &&
+      _host!.isNotEmpty &&
+      _token != null &&
+      _token!.isNotEmpty;
 
   String? get host => _host;
   String? get token => _token;
 
   Uri _uri(String path, [Map<String, String>? query]) {
     if (_host == null || _host!.isEmpty) {
-      throw ApiException('Prime is not configured yet. Set the laptop address in Settings.');
+      throw ApiException(
+        'Prime is not configured yet. Set the laptop address in Settings.',
+      );
     }
     return Uri.parse('http://$_host:8420$path').replace(queryParameters: query);
   }
 
   Map<String, String> get _headers => {
-        'X-Auth-Token': _token ?? '',
-        'Content-Type': 'application/json',
-      };
+    'X-Auth-Token': _token ?? '',
+    'Content-Type': 'application/json',
+  };
 
-  Future<Map<String, dynamic>> _get(String path, [Map<String, String>? query]) async {
+  Future<Map<String, dynamic>> _get(
+    String path, [
+    Map<String, String>? query,
+  ]) async {
     try {
       final res = await http
           .get(_uri(path, query), headers: _headers)
@@ -66,7 +75,10 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> _post(String path, [Map<String, dynamic>? body]) async {
+  Future<Map<String, dynamic>> _post(
+    String path, [
+    Map<String, dynamic>? body,
+  ]) async {
     try {
       final res = await http
           .post(_uri(path), headers: _headers, body: jsonEncode(body ?? {}))
@@ -84,7 +96,9 @@ class ApiClient {
     try {
       decoded = jsonDecode(res.body) as Map<String, dynamic>;
     } catch (_) {
-      throw ApiException('Unexpected response from daemon (HTTP ${res.statusCode})');
+      throw ApiException(
+        'Unexpected response from daemon (HTTP ${res.statusCode})',
+      );
     }
 
     if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -92,6 +106,40 @@ class ApiClient {
     }
 
     final detail = decoded['detail'] ?? 'Unknown error';
+    throw ApiException('$detail (HTTP ${res.statusCode})');
+  }
+
+  Future<List<Map<String, dynamic>>> _getList(
+    String path, [
+    Map<String, String>? query,
+  ]) async {
+    http.Response res;
+    try {
+      res = await http
+          .get(_uri(path, query), headers: _headers)
+          .timeout(const Duration(seconds: 15));
+    } catch (e) {
+      throw ApiException('Could not reach the laptop: $e');
+    }
+
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      try {
+        final decoded = jsonDecode(res.body) as List<dynamic>;
+        return decoded.cast<Map<String, dynamic>>();
+      } catch (_) {
+        throw ApiException(
+          'Unexpected response from daemon (HTTP ${res.statusCode})',
+        );
+      }
+    }
+
+    String detail = 'Unknown error';
+    try {
+      final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+      detail = decoded['detail']?.toString() ?? detail;
+    } catch (_) {
+      // ignore, use default detail
+    }
     throw ApiException('$detail (HTTP ${res.statusCode})');
   }
 
@@ -134,11 +182,14 @@ class ApiClient {
 
   // ---- Filesystem ----
 
-  Future<Map<String, dynamic>> listDir(String path) => _get('/fs/list', {'path': path});
+  Future<Map<String, dynamic>> listDir(String path) =>
+      _get('/fs/list', {'path': path});
 
-  Future<Map<String, dynamic>> previewPath(String path) => _get('/fs/preview', {'path': path});
+  Future<Map<String, dynamic>> previewPath(String path) =>
+      _get('/fs/preview', {'path': path});
 
-  Future<Map<String, dynamic>> deletePath(String path) => _post('/fs/delete', {'path': path});
+  Future<Map<String, dynamic>> deletePath(String path) =>
+      _post('/fs/delete', {'path': path});
 
   Future<Map<String, dynamic>> movePath(String src, String dst) =>
       _post('/fs/move', {'src': src, 'dst': dst});
@@ -149,11 +200,15 @@ class ApiClient {
   Future<Uint8List> downloadFile(String path) async {
     final uri = _uri('/fs/download', {'path': path});
     try {
-      final res = await http.get(uri, headers: _headers).timeout(const Duration(minutes: 5));
+      final res = await http
+          .get(uri, headers: _headers)
+          .timeout(const Duration(minutes: 5));
       if (res.statusCode != 200) {
         String detail = 'HTTP ${res.statusCode}';
         try {
-          detail = (jsonDecode(res.body) as Map<String, dynamic>)['detail'] ?? detail;
+          detail =
+              (jsonDecode(res.body) as Map<String, dynamic>)['detail'] ??
+              detail;
         } catch (_) {}
         throw ApiException('Download failed: $detail');
       }
@@ -165,13 +220,19 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> uploadFile(String targetDir, String filename, List<int> bytes) async {
+  Future<Map<String, dynamic>> uploadFile(
+    String targetDir,
+    String filename,
+    List<int> bytes,
+  ) async {
     final uri = _uri('/fs/upload');
     try {
       final request = http.MultipartRequest('POST', uri);
       request.headers['X-Auth-Token'] = _token ?? '';
       request.fields['target_dir'] = targetDir;
-      request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      request.files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: filename),
+      );
       final streamed = await request.send().timeout(const Duration(minutes: 5));
       final res = await http.Response.fromStream(streamed);
       return _handleResponse(res);
@@ -184,7 +245,8 @@ class ApiClient {
 
   // ---- Packages ----
 
-  Future<Map<String, dynamic>> getInstalledPackages() => _get('/packages/installed');
+  Future<Map<String, dynamic>> getInstalledPackages() =>
+      _get('/packages/installed');
 
   Future<Map<String, dynamic>> searchPackages(String query, {int limit = 20}) =>
       _get('/packages/search', {'query': query, 'limit': '$limit'});
@@ -202,63 +264,82 @@ class ApiClient {
 
   Future<Map<String, dynamic>> getNowPlaying() => _get('/media/now-playing');
 
-  Future<Map<String, dynamic>> mediaPlayPause() => _post('/media/play-pause');
+  Future<List<Map<String, dynamic>>> getPlayers() => _getList('/media/players');
 
-  Future<Map<String, dynamic>> mediaNext() => _post('/media/next');
+  Future<Map<String, dynamic>> mediaPlayPause([String? player]) =>
+      _post('/media/play-pause', player != null ? {'player': player} : null);
 
-  Future<Map<String, dynamic>> mediaPrevious() => _post('/media/previous');
+  Future<Map<String, dynamic>> mediaNext([String? player]) =>
+      _post('/media/next', player != null ? {'player': player} : null);
+
+  Future<Map<String, dynamic>> mediaPrevious([String? player]) =>
+      _post('/media/previous', player != null ? {'player': player} : null);
 
   Future<Map<String, dynamic>> getVolume() => _get('/audio/volume');
 
-  Future<Map<String, dynamic>> setVolume(int level) => _post('/audio/volume', {'level': level});
+  Future<Map<String, dynamic>> setVolume(int level) =>
+      _post('/audio/volume', {'level': level});
 
   Future<Map<String, dynamic>> toggleMute() => _post('/audio/mute-toggle');
 
   Future<Map<String, dynamic>> getBrightness() => _get('/display/brightness');
 
-  Future<Map<String, dynamic>> setBrightness(int level) => _post('/display/brightness', {'level': level});
+  Future<Map<String, dynamic>> setBrightness(int level) =>
+      _post('/display/brightness', {'level': level});
 
   Future<Map<String, dynamic>> getKbdBacklight() => _get('/keyboard/backlight');
 
-  Future<Map<String, dynamic>> setKbdBacklight(int level) => _post('/keyboard/backlight', {'level': level});
+  Future<Map<String, dynamic>> setKbdBacklight(int level) =>
+      _post('/keyboard/backlight', {'level': level});
 
   // ---- Network ----
 
   Future<Map<String, dynamic>> getWifiNetworks() => _get('/network/wifi');
 
-  Future<Map<String, dynamic>> connectWifi(String ssid) => _post('/network/wifi/connect', {'ssid': ssid});
+  Future<Map<String, dynamic>> connectWifi(String ssid) =>
+      _post('/network/wifi/connect', {'ssid': ssid});
 
-  Future<Map<String, dynamic>> getBluetoothDevices() => _get('/network/bluetooth');
+  Future<Map<String, dynamic>> getBluetoothDevices() =>
+      _get('/network/bluetooth');
 
-  Future<Map<String, dynamic>> connectBluetooth(String mac) => _post('/network/bluetooth/connect', {'mac': mac});
+  Future<Map<String, dynamic>> connectBluetooth(String mac) =>
+      _post('/network/bluetooth/connect', {'mac': mac});
 
   Future<Map<String, dynamic>> getWifiRadio() => _get('/network/wifi/power');
 
-  Future<Map<String, dynamic>> setWifiRadio(bool enabled) => _post('/network/wifi/power', {'enabled': enabled});
+  Future<Map<String, dynamic>> setWifiRadio(bool enabled) =>
+      _post('/network/wifi/power', {'enabled': enabled});
 
-  Future<Map<String, dynamic>> disconnectWifi() => _post('/network/wifi/disconnect');
+  Future<Map<String, dynamic>> disconnectWifi() =>
+      _post('/network/wifi/disconnect');
 
-  Future<Map<String, dynamic>> getBluetoothRadio() => _get('/network/bluetooth/power');
+  Future<Map<String, dynamic>> getBluetoothRadio() =>
+      _get('/network/bluetooth/power');
 
-  Future<Map<String, dynamic>> setBluetoothRadio(bool enabled) => _post('/network/bluetooth/power', {'enabled': enabled});
+  Future<Map<String, dynamic>> setBluetoothRadio(bool enabled) =>
+      _post('/network/bluetooth/power', {'enabled': enabled});
 
-  Future<Map<String, dynamic>> disconnectBluetooth(String mac) => _post('/network/bluetooth/disconnect', {'mac': mac});
+  Future<Map<String, dynamic>> disconnectBluetooth(String mac) =>
+      _post('/network/bluetooth/disconnect', {'mac': mac});
 
   // ---- Processes ----
 
   Future<Map<String, dynamic>> getProcesses() => _get('/processes');
 
-  Future<Map<String, dynamic>> killProcess(int pid) => _post('/processes/$pid/kill');
+  Future<Map<String, dynamic>> killProcess(int pid) =>
+      _post('/processes/$pid/kill');
 
   Future<Map<String, dynamic>> getLockStatus() => _get('/power/lock-status');
 
-  Future<Map<String, dynamic>> unlockScreen(String password) => _post('/power/unlock', {'password': password});
+  Future<Map<String, dynamic>> unlockScreen(String password) =>
+      _post('/power/unlock', {'password': password});
 
   /// Builds the request for the most recently captured screenshot.
   /// Includes a cache-busting timestamp so repeated captures don't get stuck
   /// showing a cached image.
   ({String url, Map<String, String> headers}) screenshotImageRequest() {
-    final url = 'http://$_host:8420/commands/screenshot/image?t=${DateTime.now().millisecondsSinceEpoch}';
+    final url =
+        'http://$_host:8420/commands/screenshot/image?t=${DateTime.now().millisecondsSinceEpoch}';
     return (url: url, headers: {'X-Auth-Token': _token ?? ''});
   }
 
@@ -268,7 +349,9 @@ class ApiClient {
   /// a header at connect time, same token used for REST calls.
   Uri get inputWsUri {
     if (_host == null || _host!.isEmpty) {
-      throw ApiException('Prime is not configured yet. Set the laptop address in Settings.');
+      throw ApiException(
+        'Prime is not configured yet. Set the laptop address in Settings.',
+      );
     }
     return Uri.parse('ws://$_host:8420/ws/input');
   }
@@ -277,11 +360,14 @@ class ApiClient {
 
   /// Builds the proxied art URL + auth header for a local file:// art path.
   /// Returns null if art shouldn't be proxied (empty, or already a direct http(s) URL).
-  ({String url, Map<String, String> headers})? proxiedArtRequest(String? artUrl) {
+  ({String url, Map<String, String> headers})? proxiedArtRequest(
+    String? artUrl,
+  ) {
     if (artUrl == null || artUrl.isEmpty) return null;
     if (!artUrl.startsWith('file://')) return null;
     if (_host == null) return null;
-    final url = 'http://$_host:8420/media/art?file_url=${Uri.encodeQueryComponent(artUrl)}';
+    final url =
+        'http://$_host:8420/media/art?file_url=${Uri.encodeQueryComponent(artUrl)}';
     return (url: url, headers: {'X-Auth-Token': _token ?? ''});
   }
 }

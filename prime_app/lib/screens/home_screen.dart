@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import '../services/biometric_auth.dart';
 import '../widgets/liquid_confirm_button.dart';
@@ -35,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   bool? _locked;
   Timer? _lockPollTimer;
-  Map<String, dynamic>? _nowPlaying;
+  List<Map<String, dynamic>> _players = [];
   Timer? _mediaPollTimer;
 
   @override
@@ -44,8 +45,14 @@ class _HomeScreenState extends State<HomeScreen> {
     _refresh();
     _pollLockStatus();
     _pollNowPlaying();
-    _lockPollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollLockStatus());
-    _mediaPollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _pollNowPlaying());
+    _lockPollTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _pollLockStatus(),
+    );
+    _mediaPollTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _pollNowPlaying(),
+    );
   }
 
   @override
@@ -90,46 +97,61 @@ class _HomeScreenState extends State<HomeScreen> {
       // best-effort, ignore
     }
   }
+
   Future<void> _pollNowPlaying() async {
     if (!widget.apiClient.isConfigured) return;
     try {
-      final playing = await widget.apiClient.getNowPlaying();
+      final players = await widget.apiClient.getPlayers();
       if (!mounted) return;
-      setState(() => _nowPlaying = playing);
+      setState(() => _players = players);
     } catch (_) {
       // best-effort, ignore
     }
   }
-  Future<void> _mediaPlayPause() async {
+
+  Future<void> _mediaPlayPause([String? player]) async {
     try {
-      await widget.apiClient.mediaPlayPause();
+      await widget.apiClient.mediaPlayPause(player);
       await Future.delayed(const Duration(milliseconds: 300));
       await _pollNowPlaying();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
-  Future<void> _mediaNext() async {
+
+  Future<void> _mediaNext([String? player]) async {
     try {
-      await widget.apiClient.mediaNext();
+      await widget.apiClient.mediaNext(player);
       await Future.delayed(const Duration(milliseconds: 300));
       await _pollNowPlaying();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
-  Future<void> _mediaPrevious() async {
+
+  Future<void> _mediaPrevious([String? player]) async {
     try {
-      await widget.apiClient.mediaPrevious();
+      await widget.apiClient.mediaPrevious(player);
       await Future.delayed(const Duration(milliseconds: 300));
       await _pollNowPlaying();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
   void _open(Widget screen) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => screen)).then((_) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen)).then((
+      _,
+    ) {
       // Refresh status in case something changed (e.g. settings) while away.
       _refresh();
     });
@@ -182,10 +204,12 @@ class _HomeScreenState extends State<HomeScreen> {
         statColor: Colors.white,
         accent: PrimeColors.destructive,
         gradient: PrimeGradients.tileA,
-        onTap: () => _open(SettingsScreen(
-          apiClient: widget.apiClient,
-          onSaved: () => Navigator.pop(context),
-        )),
+        onTap: () => _open(
+          SettingsScreen(
+            apiClient: widget.apiClient,
+            onSaved: () => Navigator.pop(context),
+          ),
+        ),
       ),
     ];
 
@@ -206,7 +230,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: PrimeShadows.tile,
                 ),
-                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               const Text('Prime'),
@@ -214,118 +242,125 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         body: RefreshIndicator(
-        color: PrimeColors.primary,
-        backgroundColor: PrimeColors.card,
-        onRefresh: _refresh,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-          children: [
-            if (_error != null) _ErrorBanner(message: _error!),
-            if (_loading && _status == null)
-              Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator(color: PrimeColors.primary)),
-              ),
-            if (_status != null) ...[
-              // PRIME_OVERVIEW_CARD_REMOVED
-              SizedBox(
-                height: 118, // 54 (button row) + 10 (gap) + 54 (button row)
-                child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: _MiniNowPlayingCard(
-                      apiClient: widget.apiClient,
-                      nowPlaying: _nowPlaying,
-                      onPlayPause: _mediaPlayPause,
-                      onNext: _mediaNext,
-                      onPrevious: _mediaPrevious,
+          color: PrimeColors.primary,
+          backgroundColor: PrimeColors.card,
+          onRefresh: _refresh,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+            children: [
+              if (_error != null) _ErrorBanner(message: _error!),
+              if (_loading && _status == null)
+                Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: PrimeColors.primary,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                ),
+              if (_status != null) ...[
+                // PRIME_OVERVIEW_CARD_REMOVED
+                SizedBox(
+                  height: 118, // 54 (button row) + 10 (gap) + 54 (button row)
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 54,
-                            height: 54,
-                            child: _LockToggleButton(
-                              apiClient: widget.apiClient,
-                              locked: _locked,
-                              onChanged: (v) => setState(() => _locked = v),
-                              showLabel: false,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            width: 54,
-                            height: 54,
-                            child: _PowerActionButton(
-                              apiClient: widget.apiClient,
-                              commandId: 'logout',
-                              label: 'Log Out',
-                              icon: Icons.logout,
-                              needsConfirm: true,
-                              showLabel: false,
-                            ),
-                          ),
-                        ],
+                      Expanded(
+                        child: _MiniNowPlayingCard(
+                          apiClient: widget.apiClient,
+                          players: _players,
+                          onPlayPause: _mediaPlayPause,
+                          onNext: _mediaNext,
+                          onPrevious: _mediaPrevious,
+                        ),
                       ),
-                      const SizedBox(height: 10),
-                      Row(
+                      const SizedBox(width: 10),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          SizedBox(
-                            width: 54,
-                            height: 54,
-                            child: _PowerActionButton(
-                              apiClient: widget.apiClient,
-                              commandId: 'reboot',
-                              label: 'Restart',
-                              icon: Icons.restart_alt,
-                              needsConfirm: true,
-                              expectDaemonDeath: true,
-                              showLabel: false,
-                            ),
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 54,
+                                height: 54,
+                                child: _LockToggleButton(
+                                  apiClient: widget.apiClient,
+                                  locked: _locked,
+                                  onChanged: (v) => setState(() => _locked = v),
+                                  showLabel: false,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              SizedBox(
+                                width: 54,
+                                height: 54,
+                                child: _PowerActionButton(
+                                  apiClient: widget.apiClient,
+                                  commandId: 'logout',
+                                  label: 'Log Out',
+                                  icon: Icons.logout,
+                                  needsConfirm: true,
+                                  showLabel: false,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            width: 54,
-                            height: 54,
-                            child: _PowerActionButton(
-                              apiClient: widget.apiClient,
-                              commandId: 'shutdown',
-                              label: 'Shutdown',
-                              icon: Icons.power_settings_new,
-                              needsConfirm: true,
-                              expectDaemonDeath: true,
-                              showLabel: false,
-                            ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 54,
+                                height: 54,
+                                child: _PowerActionButton(
+                                  apiClient: widget.apiClient,
+                                  commandId: 'reboot',
+                                  label: 'Restart',
+                                  icon: Icons.restart_alt,
+                                  needsConfirm: true,
+                                  expectDaemonDeath: true,
+                                  showLabel: false,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              SizedBox(
+                                width: 54,
+                                height: 54,
+                                child: _PowerActionButton(
+                                  apiClient: widget.apiClient,
+                                  commandId: 'shutdown',
+                                  label: 'Shutdown',
+                                  icon: Icons.power_settings_new,
+                                  needsConfirm: true,
+                                  expectDaemonDeath: true,
+                                  showLabel: false,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ],
                   ),
-                ],
+                ),
+              ],
+              const SizedBox(height: 18),
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.02,
+                children: actions
+                    .take(4)
+                    .map((a) => _ActionTile(item: a))
+                    .toList(),
               ),
-              ),
+              const SizedBox(height: 12),
+              _ActionTile(item: actions.last, fullWidth: true),
             ],
-            const SizedBox(height: 18),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.02,
-              children: actions.take(4).map((a) => _ActionTile(item: a)).toList(),
-            ),
-            const SizedBox(height: 12),
-            _ActionTile(item: actions.last, fullWidth: true),
-          ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -364,28 +399,51 @@ class _ActionTile extends StatefulWidget {
 class _ActionTileState extends State<_ActionTile> {
   bool _pressed = false;
 
+  void _handleTapDown(TapDownDetails _) {
+    HapticFeedback.selectionClick();
+    setState(() => _pressed = true);
+  }
+
+  void _handleTapCancel() {
+    setState(() => _pressed = false);
+  }
+
+  Future<void> _handleTap() async {
+    // Hold the pressed visual briefly before firing the real action --
+    // these tiles navigate away immediately, so without this delay a
+    // normal quick tap never actually shows the press animation before
+    // the screen transitions away.
+    await Future.delayed(const Duration(milliseconds: 130));
+    if (!mounted) return;
+    setState(() => _pressed = false);
+    widget.item.onTap();
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
     return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTap: item.onTap,
-      child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 90),
+      onTapDown: _handleTapDown,
+      onTapCancel: _handleTapCancel,
+      onTap: _handleTap,
+      child: AnimatedSlide(
+        offset: _pressed ? const Offset(0, 0.015) : Offset.zero,
+        duration: const Duration(milliseconds: 110),
         curve: Curves.easeOut,
-        child: Container(
-          width: widget.fullWidth ? double.infinity : null,
-          decoration: BoxDecoration(
-            gradient: item.gradient,
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: PrimeShadows.tile,
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: ShimmerSweep(
-            period: const Duration(seconds: 4),
+        child: AnimatedScale(
+          scale: _pressed ? 0.93 : 1.0,
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOut,
+            width: widget.fullWidth ? double.infinity : null,
+            decoration: BoxDecoration(
+              gradient: item.gradient,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: _pressed ? const [] : PrimeShadows.tile,
+            ),
+            clipBehavior: Clip.antiAlias,
             child: Stack(
               children: [
                 // Corner glow blobs, matching the bolt.new FeatureTiles decoration.
@@ -395,7 +453,10 @@ class _ActionTileState extends State<_ActionTile> {
                   child: Container(
                     width: 96,
                     height: 96,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.10),
+                    ),
                   ),
                 ),
                 Positioned(
@@ -404,7 +465,10 @@ class _ActionTileState extends State<_ActionTile> {
                   child: Container(
                     width: 80,
                     height: 80,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.05)),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.05),
+                    ),
                   ),
                 ),
                 Padding(
@@ -423,12 +487,19 @@ class _ActionTileState extends State<_ActionTile> {
                               color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Icon(item.icon, size: 22, color: Colors.white),
+                            child: Icon(
+                              item.icon,
+                              size: 22,
+                              color: Colors.white,
+                            ),
                           ),
                           if (item.stat != null)
                             Flexible(
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 5,
+                                ),
                                 decoration: BoxDecoration(
                                   color: Colors.white.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(999),
@@ -436,7 +507,11 @@ class _ActionTileState extends State<_ActionTile> {
                                 child: Text(
                                   item.stat!,
                                   overflow: TextOverflow.ellipsis,
-                                  style: PrimeTheme.text(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
+                                  style: PrimeTheme.text(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
@@ -446,13 +521,21 @@ class _ActionTileState extends State<_ActionTile> {
                       Text(
                         item.label,
                         overflow: TextOverflow.ellipsis,
-                        style: PrimeTheme.text(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white),
+                        style: PrimeTheme.text(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         item.subtitle,
                         overflow: TextOverflow.ellipsis,
-                        style: PrimeTheme.text(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.72)),
+                        style: PrimeTheme.text(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.72),
+                        ),
                       ),
                     ],
                   ),
@@ -478,9 +561,14 @@ class _ErrorBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: PrimeColors.destructive.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: PrimeColors.destructive.withValues(alpha: 0.3)),
+        border: Border.all(
+          color: PrimeColors.destructive.withValues(alpha: 0.3),
+        ),
       ),
-      child: Text(message, style: PrimeTheme.mono(color: PrimeColors.destructive, fontSize: 12)),
+      child: Text(
+        message,
+        style: PrimeTheme.mono(color: PrimeColors.destructive, fontSize: 12),
+      ),
     );
   }
 }
@@ -507,13 +595,19 @@ class _OverviewCard extends StatelessWidget {
     final diskTotal = (disk['total_gb'] as num).toDouble();
     final diskFree = (disk['free_gb'] as num).toDouble();
     final diskPct = diskTotal > 0 ? (diskUsed / diskTotal * 100).round() : 0;
-    final diskBarColor = diskPct > 80 ? PrimeColors.warning : PrimeColors.primary;
+    final diskBarColor = diskPct > 80
+        ? PrimeColors.warning
+        : PrimeColors.primary;
 
     final cpuPct = (status['cpu_percent'] as num?)?.round() ?? 0;
     final mem = status['memory'] as Map<String, dynamic>?;
-    final memUsedGb = mem != null ? (mem['used_gb'] as num).toStringAsFixed(1) : '--';
+    final memUsedGb = mem != null
+        ? (mem['used_gb'] as num).toStringAsFixed(1)
+        : '--';
     final net = status['network'] as Map<String, dynamic>?;
-    final downKbps = net != null ? (net['download_kbps'] as num).toDouble() : 0.0;
+    final downKbps = net != null
+        ? (net['download_kbps'] as num).toDouble()
+        : 0.0;
     final netLabel = downKbps >= 1024
         ? '${(downKbps / 1024).toStringAsFixed(1)}m'
         : '${downKbps.toStringAsFixed(0)}k';
@@ -534,7 +628,11 @@ class _OverviewCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'ONLINE',
-                style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.primary, letterSpacing: 2),
+                style: PrimeTheme.mono(
+                  fontSize: 10,
+                  color: PrimeColors.primary,
+                  letterSpacing: 2,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -542,7 +640,10 @@ class _OverviewCard extends StatelessWidget {
                   host,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.right,
-                  style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground),
+                  style: PrimeTheme.mono(
+                    fontSize: 10,
+                    color: PrimeColors.mutedForeground,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
@@ -551,7 +652,11 @@ class _OverviewCard extends StatelessWidget {
                 child: AnimatedRotation(
                   turns: loading ? 1 : 0,
                   duration: const Duration(milliseconds: 600),
-                  child: Icon(Icons.refresh, size: 16, color: PrimeColors.mutedForeground),
+                  child: Icon(
+                    Icons.refresh,
+                    size: 16,
+                    color: PrimeColors.mutedForeground,
+                  ),
                 ),
               ),
             ],
@@ -564,25 +669,58 @@ class _OverviewCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'uptime ${status['daemon_uptime'] ?? ''}',
-            style: PrimeTheme.mono(fontSize: 11, color: PrimeColors.mutedForeground),
+            style: PrimeTheme.mono(
+              fontSize: 11,
+              color: PrimeColors.mutedForeground,
+            ),
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              _StatTile(icon: Icons.memory, label: 'cpu', value: '$cpuPct%', color: PrimeColors.cpuAccent),
-              _StatTile(icon: Icons.developer_board, label: 'mem', value: '${memUsedGb}g', color: PrimeColors.memAccent),
-              _StatTile(icon: Icons.sd_card_outlined, label: 'disk', value: '$diskPct%', color: PrimeColors.warning),
-              _StatTile(icon: Icons.swap_vert, label: 'net', value: netLabel, color: PrimeColors.netAccent),
+              _StatTile(
+                icon: Icons.memory,
+                label: 'cpu',
+                value: '$cpuPct%',
+                color: PrimeColors.cpuAccent,
+              ),
+              _StatTile(
+                icon: Icons.developer_board,
+                label: 'mem',
+                value: '${memUsedGb}g',
+                color: PrimeColors.memAccent,
+              ),
+              _StatTile(
+                icon: Icons.sd_card_outlined,
+                label: 'disk',
+                value: '$diskPct%',
+                color: PrimeColors.warning,
+              ),
+              _StatTile(
+                icon: Icons.swap_vert,
+                label: 'net',
+                value: netLabel,
+                color: PrimeColors.netAccent,
+              ),
             ],
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              Text('DISK', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+              Text(
+                'DISK',
+                style: PrimeTheme.mono(
+                  fontSize: 9,
+                  color: PrimeColors.mutedForeground,
+                  letterSpacing: 2,
+                ),
+              ),
               const Spacer(),
               Text(
                 '${diskUsed.toStringAsFixed(1)} / ${diskTotal.toStringAsFixed(1)} GB',
-                style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground),
+                style: PrimeTheme.mono(
+                  fontSize: 10,
+                  color: PrimeColors.mutedForeground,
+                ),
               ),
             ],
           ),
@@ -605,8 +743,17 @@ class _OverviewCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('$diskPct% used', style: PrimeTheme.mono(fontSize: 9, color: diskBarColor)),
-              Text('${diskFree.toStringAsFixed(1)} GB free', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground)),
+              Text(
+                '$diskPct% used',
+                style: PrimeTheme.mono(fontSize: 9, color: diskBarColor),
+              ),
+              Text(
+                '${diskFree.toStringAsFixed(1)} GB free',
+                style: PrimeTheme.mono(
+                  fontSize: 9,
+                  color: PrimeColors.mutedForeground,
+                ),
+              ),
             ],
           ),
         ],
@@ -621,7 +768,12 @@ class _StatTile extends StatelessWidget {
   final String value;
   final Color color;
 
-  const _StatTile({required this.icon, required this.label, required this.value, required this.color});
+  const _StatTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -638,14 +790,24 @@ class _StatTile extends StatelessWidget {
             child: Icon(icon, size: 14, color: color),
           ),
           const SizedBox(height: 5),
-          Text(label, style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground)),
+          Text(
+            label,
+            style: PrimeTheme.mono(
+              fontSize: 9,
+              color: PrimeColors.mutedForeground,
+            ),
+          ),
           const SizedBox(height: 2),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
             child: Text(
               value,
               key: ValueKey(value),
-              style: PrimeTheme.mono(fontSize: 12, fontWeight: FontWeight.w700, color: color),
+              style: PrimeTheme.mono(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -659,14 +821,14 @@ class _StatTile extends StatelessWidget {
 /// sweep + shimmer while something is actively playing.
 class _MiniNowPlayingCard extends StatefulWidget {
   final ApiClient apiClient;
-  final Map<String, dynamic>? nowPlaying;
-  final VoidCallback onPlayPause;
-  final VoidCallback onNext;
-  final VoidCallback onPrevious;
+  final List<Map<String, dynamic>> players;
+  final void Function(String? player) onPlayPause;
+  final void Function(String? player) onNext;
+  final void Function(String? player) onPrevious;
 
   const _MiniNowPlayingCard({
     required this.apiClient,
-    required this.nowPlaying,
+    required this.players,
     required this.onPlayPause,
     required this.onNext,
     required this.onPrevious,
@@ -676,18 +838,26 @@ class _MiniNowPlayingCard extends StatefulWidget {
   State<_MiniNowPlayingCard> createState() => _MiniNowPlayingCardState();
 }
 
-class _MiniNowPlayingCardState extends State<_MiniNowPlayingCard> with SingleTickerProviderStateMixin {
+class _MiniNowPlayingCardState extends State<_MiniNowPlayingCard>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _gradientCtrl;
+  late final PageController _pageCtrl;
+  int _page = 0;
 
   @override
   void initState() {
     super.initState();
-    _gradientCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat(reverse: true);
+    _gradientCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 6),
+    )..repeat(reverse: true);
+    _pageCtrl = PageController();
   }
 
   @override
   void dispose() {
     _gradientCtrl.dispose();
+    _pageCtrl.dispose();
     super.dispose();
   }
 
@@ -725,41 +895,33 @@ class _MiniNowPlayingCardState extends State<_MiniNowPlayingCard> with SingleTic
     );
   }
 
-  Widget _miniControl(IconData icon, VoidCallback onTap, {bool filled = false}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: EdgeInsets.all(filled ? 5 : 4),
-        child: filled
-            ? Container(
-                padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: Icon(icon, size: 14, color: PrimeColors.prime700),
-              )
-            : Icon(icon, size: 17, color: Colors.white.withValues(alpha: 0.85)),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final nowPlaying = widget.nowPlaying;
-    final active = nowPlaying?['active'] == true;
-    final playing = nowPlaying?['status'] == 'Playing';
-
+    final players = widget.players;
+    final active = players.isNotEmpty;
+    final pageIndex = active ? _page.clamp(0, players.length - 1) : 0;
     return AnimatedBuilder(
       animation: _gradientCtrl,
       builder: (context, _) {
         final t = _gradientCtrl.value;
         final begin = Alignment.lerp(Alignment.topLeft, Alignment.topRight, t)!;
-        final end = Alignment.lerp(Alignment.bottomRight, Alignment.bottomLeft, t)!;
-
+        final end = Alignment.lerp(
+          Alignment.bottomRight,
+          Alignment.bottomLeft,
+          t,
+        )!;
         return Container(
-          padding: EdgeInsets.symmetric(horizontal: active ? 12 : 10, vertical: active ? 10 : 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: active ? 12 : 10,
+            vertical: active ? 10 : 8,
+          ),
           decoration: BoxDecoration(
             gradient: active
-                ? LinearGradient(begin: begin, end: end, colors: [PrimeColors.prime600, PrimeColors.prime800])
+                ? LinearGradient(
+                    begin: begin,
+                    end: end,
+                    colors: [PrimeColors.prime600, PrimeColors.prime800],
+                  )
                 : null,
             color: active ? null : PrimeColors.card,
             borderRadius: BorderRadius.circular(22),
@@ -775,9 +937,19 @@ class _MiniNowPlayingCardState extends State<_MiniNowPlayingCard> with SingleTic
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.music_off, size: 13, color: PrimeColors.mutedForeground),
+                        Icon(
+                          Icons.music_off,
+                          size: 13,
+                          color: PrimeColors.mutedForeground,
+                        ),
                         const SizedBox(width: 6),
-                        Text('nothing playing', style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground)),
+                        Text(
+                          'nothing playing',
+                          style: PrimeTheme.mono(
+                            fontSize: 10,
+                            color: PrimeColors.mutedForeground,
+                          ),
+                        ),
                       ],
                     ),
                   )
@@ -789,72 +961,222 @@ class _MiniNowPlayingCardState extends State<_MiniNowPlayingCard> with SingleTic
                         child: Container(
                           width: 70,
                           height: 70,
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withValues(alpha: 0.10),
+                          ),
                         ),
                       ),
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              _buildArt(nowPlaying!['art_url'] as String?),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    MarqueeText(
-                                      text: (nowPlaying['title'] as String?)?.isNotEmpty == true
-                                          ? nowPlaying['title'] as String
-                                          : 'unknown title',
-                                      style: PrimeTheme.text(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
-                                    ),
-                                    Text(
-                                      [nowPlaying['artist'], nowPlaying['album']]
-                                          .where((s) => s != null && (s as String).isNotEmpty)
-                                          .join(' — '),
-                                      style: PrimeTheme.mono(fontSize: 9, color: Colors.white.withValues(alpha: 0.75)),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          if ((nowPlaying['duration_seconds'] as int? ?? 0) > 0)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(3),
-                                child: LinearProgressIndicator(
-                                  value: (nowPlaying['position_seconds'] as int) / (nowPlaying['duration_seconds'] as int),
-                                  minHeight: 3,
-                                  backgroundColor: Colors.white.withValues(alpha: 0.22),
-                                  valueColor: const AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              ),
-                            )
-                          else
-                            const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _miniControl(Icons.skip_previous, widget.onPrevious),
-                              _miniControl(playing ? Icons.pause : Icons.play_arrow, widget.onPlayPause, filled: true),
-                              _miniControl(Icons.skip_next, widget.onNext),
-                            ],
-                          ),
-                        ],
+                      PageView.builder(
+                        controller: _pageCtrl,
+                        itemCount: players.length,
+                        onPageChanged: (i) => setState(() => _page = i),
+                        itemBuilder: (context, i) =>
+                            _buildPlayerContent(players[i]),
                       ),
+                      if (players.length > 1)
+                        Positioned(
+                          top: 4,
+                          right: 6,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: List.generate(players.length, (i) {
+                              final isCurrent = i == pageIndex;
+                              return AnimatedContainer(
+                                duration: const Duration(milliseconds: 250),
+                                curve: Curves.easeOut,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 2,
+                                ),
+                                width: isCurrent ? 12 : 5,
+                                height: 5,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(
+                                    alpha: isCurrent ? 0.9 : 0.4,
+                                  ),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              );
+                            }),
+                          ),
+                        ),
                     ],
                   ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPlayerContent(Map<String, dynamic> nowPlaying) {
+    final playing = nowPlaying['status'] == 'Playing';
+    final player = nowPlaying['player'] as String?;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildArt(nowPlaying['art_url'] as String?),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  MarqueeText(
+                    text: (nowPlaying['title'] as String?)?.isNotEmpty == true
+                        ? nowPlaying['title'] as String
+                        : 'unknown title',
+                    style: PrimeTheme.text(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    [nowPlaying['artist'], nowPlaying['album']]
+                        .where((s) => s != null && (s as String).isNotEmpty)
+                        .join(' — '),
+                    style: PrimeTheme.mono(
+                      fontSize: 9,
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if ((nowPlaying['duration_seconds'] as int? ?? 0) > 0)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value:
+                    (nowPlaying['position_seconds'] as int) /
+                    (nowPlaying['duration_seconds'] as int),
+                minHeight: 3,
+                backgroundColor: Colors.white.withValues(alpha: 0.22),
+                valueColor: const AlwaysStoppedAnimation(Colors.white),
+              ),
+            ),
+          )
+        else
+          const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _MiniControlButton(
+              icon: Icons.skip_previous,
+              onTap: () => widget.onPrevious(player),
+            ),
+            _MiniControlButton(
+              icon: playing ? Icons.pause : Icons.play_arrow,
+              onTap: () => widget.onPlayPause(player),
+              filled: true,
+            ),
+            _MiniControlButton(
+              icon: Icons.skip_next,
+              onTap: () => widget.onNext(player),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Prev/play-pause/next button used inside the now-playing carousel.
+/// Own widget (rather than a plain method) so each button can track its
+/// own press state independently -- scale-down + haptic tick on tap,
+/// with a minimum visible-press duration so a fast tap still shows the
+/// animation instead of reversing before it's ever painted.
+class _MiniControlButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool filled;
+
+  const _MiniControlButton({
+    required this.icon,
+    required this.onTap,
+    this.filled = false,
+  });
+
+  @override
+  State<_MiniControlButton> createState() => _MiniControlButtonState();
+}
+
+class _MiniControlButtonState extends State<_MiniControlButton> {
+  bool _pressed = false;
+  DateTime? _pressStart;
+  static const _minVisiblePress = Duration(milliseconds: 90);
+
+  void _setPressed(bool value) {
+    if (value) {
+      _pressStart = DateTime.now();
+      HapticFeedback.selectionClick();
+      setState(() => _pressed = true);
+      return;
+    }
+    final start = _pressStart;
+    final elapsed = start == null
+        ? _minVisiblePress
+        : DateTime.now().difference(start);
+    if (elapsed >= _minVisiblePress) {
+      if (mounted) setState(() => _pressed = false);
+      return;
+    }
+    Future.delayed(_minVisiblePress - elapsed, () {
+      if (mounted) setState(() => _pressed = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: _pressed ? 0.8 : 1.0,
+      duration: const Duration(milliseconds: 90),
+      curve: Curves.easeOut,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: widget.onTap,
+          onHighlightChanged: _setPressed,
+          customBorder: const CircleBorder(),
+          splashColor: Colors.white.withValues(alpha: 0.35),
+          highlightColor: Colors.white.withValues(alpha: 0.15),
+          child: Padding(
+            padding: EdgeInsets.all(widget.filled ? 5 : 4),
+            child: widget.filled
+                ? Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      widget.icon,
+                      size: 14,
+                      color: PrimeColors.prime700,
+                    ),
+                  )
+                : Icon(
+                    widget.icon,
+                    size: 17,
+                    color: Colors.white.withValues(
+                      alpha: _pressed ? 1.0 : 0.85,
+                    ),
+                  ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -897,6 +1219,7 @@ class _PowerActionButton extends StatelessWidget {
     );
   }
 }
+
 /// Lock/Unlock toggle. Locking uses the existing fire-and-forget
 /// `lock-screen` command. Unlocking sends your stored laptop password to
 /// the daemon, which types it into the running hyprlock prompt so
@@ -930,7 +1253,10 @@ class _LockToggleButton extends StatelessWidget {
           children: [
             Text(
               'Stored securely on this device only, never on the laptop.',
-              style: PrimeTheme.mono(fontSize: 11, color: PrimeColors.mutedForeground),
+              style: PrimeTheme.mono(
+                fontSize: 11,
+                color: PrimeColors.mutedForeground,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -946,11 +1272,20 @@ class _LockToggleButton extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(null),
-            child: Text('Cancel', style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground)),
+            child: Text(
+              'Cancel',
+              style: PrimeTheme.mono(
+                fontSize: 12,
+                color: PrimeColors.mutedForeground,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: Text('Save', style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.primary)),
+            child: Text(
+              'Save',
+              style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.primary),
+            ),
           ),
         ],
       ),
@@ -971,7 +1306,9 @@ class _LockToggleButton extends StatelessWidget {
       onChanged(false);
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unlock failed — check the password and try again')),
+        const SnackBar(
+          content: Text('Unlock failed — check the password and try again'),
+        ),
       );
     }
   }
