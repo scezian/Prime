@@ -17,7 +17,6 @@ class ControlScreen extends StatefulWidget {
 }
 
 class _ControlScreenState extends State<ControlScreen> {
-  Map<String, dynamic>? _nowPlaying;
   int _volume = 0;
   bool _muted = false;
   double? _draggingVolume;
@@ -34,7 +33,10 @@ class _ControlScreenState extends State<ControlScreen> {
   void initState() {
     super.initState();
     _loadAll();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _loadAll(silent: true));
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _loadAll(silent: true),
+    );
   }
 
   @override
@@ -45,21 +47,22 @@ class _ControlScreenState extends State<ControlScreen> {
 
   Future<void> _loadAll({bool silent = false}) async {
     if (!widget.apiClient.isConfigured) {
-      if (!silent) setState(() => _error = 'Not configured. Go to Settings first.');
+      if (!silent)
+        setState(() => _error = 'Not configured. Go to Settings first.');
       return;
     }
     try {
-      final playing = await widget.apiClient.getNowPlaying();
       final vol = await widget.apiClient.getVolume();
       final brightness = await widget.apiClient.getBrightness();
       final kbdBacklight = await widget.apiClient.getKbdBacklight();
       if (!mounted) return;
       setState(() {
-        _nowPlaying = playing;
         _volume = vol['volume'] as int;
         _muted = vol['muted'] as bool;
-        if (_draggingBrightness == null) _brightness = brightness['percent'] as int;
-        if (_draggingKbdBacklight == null) _kbdBacklight = kbdBacklight['percent'] as int;
+        if (_draggingBrightness == null)
+          _brightness = brightness['percent'] as int;
+        if (_draggingKbdBacklight == null)
+          _kbdBacklight = kbdBacklight['percent'] as int;
         _error = null;
       });
     } catch (e) {
@@ -81,36 +84,6 @@ class _ControlScreenState extends State<ControlScreen> {
     }
   }
 
-  Future<void> _playPause() async {
-    try {
-      await widget.apiClient.mediaPlayPause();
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _loadAll(silent: true);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
-
-  Future<void> _next() async {
-    try {
-      await widget.apiClient.mediaNext();
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _loadAll(silent: true);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
-
-  Future<void> _previous() async {
-    try {
-      await widget.apiClient.mediaPrevious();
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _loadAll(silent: true);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
-
   Future<void> _onVolumeChangeEnd(double value) async {
     final level = value.round();
     setState(() {
@@ -120,7 +93,10 @@ class _ControlScreenState extends State<ControlScreen> {
     try {
       await widget.apiClient.setVolume(level);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -133,7 +109,10 @@ class _ControlScreenState extends State<ControlScreen> {
     try {
       await widget.apiClient.setBrightness(level);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -143,7 +122,10 @@ class _ControlScreenState extends State<ControlScreen> {
       final res = await widget.apiClient.setKbdBacklight(value.round());
       setState(() => _kbdBacklight = res['percent'] as int);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -155,14 +137,11 @@ class _ControlScreenState extends State<ControlScreen> {
         _muted = res['muted'] as bool;
       });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     }
-  }
-
-  String _formatTime(int seconds) {
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
   }
 
   Future<void> _toggleWifiRadio(bool value) async {
@@ -173,7 +152,9 @@ class _ControlScreenState extends State<ControlScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _wifiEnabled = previous);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     }
   }
@@ -186,7 +167,9 @@ class _ControlScreenState extends State<ControlScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _bluetoothEnabled = previous);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     }
   }
@@ -196,7 +179,9 @@ class _ControlScreenState extends State<ControlScreen> {
       context: context,
       title: 'WIFI',
       icon: Icons.wifi,
-      fetch: () => widget.apiClient.getWifiNetworks().then((r) => r['networks'] as List<dynamic>),
+      fetch: () => widget.apiClient.getWifiNetworks().then(
+        (r) => r['networks'] as List<dynamic>,
+      ),
       connect: (item) => widget.apiClient.connectWifi(item['ssid'] as String),
       disconnect: (item) => widget.apiClient.disconnectWifi(),
       idOf: (item) => item['ssid'] as String,
@@ -212,9 +197,13 @@ class _ControlScreenState extends State<ControlScreen> {
       context: context,
       title: 'BLUETOOTH',
       icon: Icons.bluetooth,
-      fetch: () => widget.apiClient.getBluetoothDevices().then((r) => r['devices'] as List<dynamic>),
-      connect: (item) => widget.apiClient.connectBluetooth(item['mac'] as String),
-      disconnect: (item) => widget.apiClient.disconnectBluetooth(item['mac'] as String),
+      fetch: () => widget.apiClient.getBluetoothDevices().then(
+        (r) => r['devices'] as List<dynamic>,
+      ),
+      connect: (item) =>
+          widget.apiClient.connectBluetooth(item['mac'] as String),
+      disconnect: (item) =>
+          widget.apiClient.disconnectBluetooth(item['mac'] as String),
       idOf: (item) => item['mac'] as String,
       labelOf: (item) => item['name'] as String,
       connectedOf: (item) => item['connected'] == true,
@@ -231,7 +220,8 @@ class _ControlScreenState extends State<ControlScreen> {
   Widget build(BuildContext context) {
     final displayVolume = _draggingVolume ?? _volume.toDouble();
     final displayBrightness = _draggingBrightness ?? _brightness.toDouble();
-    final displayKbdBacklight = _draggingKbdBacklight ?? _kbdBacklight.toDouble();
+    final displayKbdBacklight =
+        _draggingKbdBacklight ?? _kbdBacklight.toDouble();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Control')),
@@ -249,36 +239,55 @@ class _ControlScreenState extends State<ControlScreen> {
                 decoration: BoxDecoration(
                   color: PrimeColors.destructive.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: PrimeColors.destructive.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: PrimeColors.destructive.withValues(alpha: 0.3),
+                  ),
                 ),
-                child: Text(_error!, style: PrimeTheme.mono(color: PrimeColors.destructive, fontSize: 12)),
+                child: Text(
+                  _error!,
+                  style: PrimeTheme.mono(
+                    color: PrimeColors.destructive,
+                    fontSize: 12,
+                  ),
+                ),
               ),
-            _NowPlayingCard(
-              apiClient: widget.apiClient,
-              nowPlaying: _nowPlaying,
-              onPlayPause: _playPause,
-              onNext: _next,
-              onPrevious: _previous,
-              formatTime: _formatTime,
+            Text(
+              'VOLUME',
+              style: PrimeTheme.mono(
+                fontSize: 9,
+                color: PrimeColors.mutedForeground,
+                letterSpacing: 2,
+              ),
             ),
-            const SizedBox(height: 16),
-            Text('VOLUME', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
             const SizedBox(height: 8),
             _SliderCard(
               value: displayVolume,
-              leadingIcon: _muted ? Icons.volume_off : (displayVolume > 50 ? Icons.volume_up : Icons.volume_down),
+              leadingIcon: _muted
+                  ? Icons.volume_off
+                  : (displayVolume > 50 ? Icons.volume_up : Icons.volume_down),
               iconColor: _muted ? PrimeColors.destructive : PrimeColors.primary,
-              activeColor: _muted ? PrimeColors.mutedForeground : PrimeColors.primary,
+              activeColor: _muted
+                  ? PrimeColors.mutedForeground
+                  : PrimeColors.primary,
               onIconTap: _toggleMute,
               onChanged: (v) => setState(() => _draggingVolume = v),
               onChangeEnd: _onVolumeChangeEnd,
             ),
             const SizedBox(height: 16),
-            Text('BRIGHTNESS', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+            Text(
+              'BRIGHTNESS',
+              style: PrimeTheme.mono(
+                fontSize: 9,
+                color: PrimeColors.mutedForeground,
+                letterSpacing: 2,
+              ),
+            ),
             const SizedBox(height: 8),
             _SliderCard(
               value: displayBrightness,
-              leadingIcon: displayBrightness > 50 ? Icons.brightness_high : Icons.brightness_low,
+              leadingIcon: displayBrightness > 50
+                  ? Icons.brightness_high
+                  : Icons.brightness_low,
               iconColor: PrimeColors.warning,
               activeColor: PrimeColors.warning,
               onIconTap: null,
@@ -286,7 +295,14 @@ class _ControlScreenState extends State<ControlScreen> {
               onChangeEnd: _onBrightnessChangeEnd,
             ),
             const SizedBox(height: 16),
-            Text('KEYBOARD BACKLIGHT', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+            Text(
+              'KEYBOARD BACKLIGHT',
+              style: PrimeTheme.mono(
+                fontSize: 9,
+                color: PrimeColors.mutedForeground,
+                letterSpacing: 2,
+              ),
+            ),
             const SizedBox(height: 8),
             _SliderCard(
               value: displayKbdBacklight,
@@ -298,7 +314,14 @@ class _ControlScreenState extends State<ControlScreen> {
               onChangeEnd: _onKbdBacklightChangeEnd,
             ),
             const SizedBox(height: 20),
-            Text('NETWORK', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+            Text(
+              'NETWORK',
+              style: PrimeTheme.mono(
+                fontSize: 9,
+                color: PrimeColors.mutedForeground,
+                letterSpacing: 2,
+              ),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -326,7 +349,14 @@ class _ControlScreenState extends State<ControlScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            Text('QUICK ACTIONS', style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+            Text(
+              'QUICK ACTIONS',
+              style: PrimeTheme.mono(
+                fontSize: 9,
+                color: PrimeColors.mutedForeground,
+                letterSpacing: 2,
+              ),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -336,7 +366,10 @@ class _ControlScreenState extends State<ControlScreen> {
                     label: 'Touchpad',
                     color: PrimeColors.primary,
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => TouchpadScreen(apiClient: widget.apiClient)),
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            TouchpadScreen(apiClient: widget.apiClient),
+                      ),
                     ),
                   ),
                 ),
@@ -396,12 +429,19 @@ class _RadioQuickButton extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  Icon(icon, size: 16, color: knownOff ? PrimeColors.mutedForeground : color),
+                  Icon(
+                    icon,
+                    size: 16,
+                    color: knownOff ? PrimeColors.mutedForeground : color,
+                  ),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       label,
-                      style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground),
+                      style: PrimeTheme.mono(
+                        fontSize: 10,
+                        color: PrimeColors.mutedForeground,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -458,12 +498,19 @@ class _QuickActionTile extends StatelessWidget {
             Flexible(
               child: Text(
                 label,
-                style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground),
+                style: PrimeTheme.mono(
+                  fontSize: 10,
+                  color: PrimeColors.mutedForeground,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             const Spacer(),
-            Icon(Icons.chevron_right, size: 14, color: PrimeColors.mutedForeground),
+            Icon(
+              Icons.chevron_right,
+              size: 14,
+              color: PrimeColors.mutedForeground,
+            ),
           ],
         ),
       ),
@@ -535,7 +582,10 @@ class _LockToggleButton extends StatelessWidget {
           children: [
             Text(
               'Stored securely on this device only, never on the laptop.',
-              style: PrimeTheme.mono(fontSize: 11, color: PrimeColors.mutedForeground),
+              style: PrimeTheme.mono(
+                fontSize: 11,
+                color: PrimeColors.mutedForeground,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -551,11 +601,20 @@ class _LockToggleButton extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(null),
-            child: Text('Cancel', style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground)),
+            child: Text(
+              'Cancel',
+              style: PrimeTheme.mono(
+                fontSize: 12,
+                color: PrimeColors.mutedForeground,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: Text('Save', style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.primary)),
+            child: Text(
+              'Save',
+              style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.primary),
+            ),
           ),
         ],
       ),
@@ -581,7 +640,11 @@ class _LockToggleButton extends StatelessWidget {
       // deleting it was too aggressive. Update it from Settings if it
       // actually is wrong.
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unlock failed — try again, or update the password in Settings')),
+        const SnackBar(
+          content: Text(
+            'Unlock failed — try again, or update the password in Settings',
+          ),
+        ),
       );
     }
   }
@@ -612,7 +675,10 @@ class _ProcessKillSheet extends StatefulWidget {
   final ApiClient apiClient;
   const _ProcessKillSheet({required this.apiClient});
 
-  static void show({required BuildContext context, required ApiClient apiClient}) {
+  static void show({
+    required BuildContext context,
+    required ApiClient apiClient,
+  }) {
     showModalBottomSheet(
       context: context,
       backgroundColor: PrimeColors.background,
@@ -642,7 +708,8 @@ class _ProcessKillSheetState extends State<_ProcessKillSheet> {
   Future<void> _load() async {
     try {
       final res = await widget.apiClient.getProcesses();
-      final list = (res['processes'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final list = (res['processes'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
       if (!mounted) return;
       setState(() {
         _processes = list;
@@ -660,7 +727,10 @@ class _ProcessKillSheetState extends State<_ProcessKillSheet> {
       await widget.apiClient.killProcess(pid);
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _killingPid = null);
     }
@@ -681,21 +751,49 @@ class _ProcessKillSheetState extends State<_ProcessKillSheet> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.power_settings_new, size: 16, color: PrimeColors.destructive),
+                  const Icon(
+                    Icons.power_settings_new,
+                    size: 16,
+                    color: PrimeColors.destructive,
+                  ),
                   const SizedBox(width: 8),
-                  Text('TERMINATE', style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+                  Text(
+                    'TERMINATE',
+                    style: PrimeTheme.mono(
+                      fontSize: 12,
+                      color: PrimeColors.mutedForeground,
+                      letterSpacing: 2,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
               if (_error != null)
-                Text(_error!, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.destructive))
+                Text(
+                  _error!,
+                  style: PrimeTheme.mono(
+                    fontSize: 12,
+                    color: PrimeColors.destructive,
+                  ),
+                )
               else if (_processes == null)
                 Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground)),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: PrimeColors.mutedForeground,
+                    ),
+                  ),
                 )
               else if (_processes!.isEmpty)
-                Text('no active processes', style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground))
+                Text(
+                  'no active processes',
+                  style: PrimeTheme.mono(
+                    fontSize: 12,
+                    color: PrimeColors.mutedForeground,
+                  ),
+                )
               else
                 Flexible(
                   child: ListView.builder(
@@ -722,14 +820,20 @@ class _ProcessKillSheetState extends State<_ProcessKillSheet> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(name, style: PrimeTheme.mono(fontSize: 13)),
+                                    Text(
+                                      name,
+                                      style: PrimeTheme.mono(fontSize: 13),
+                                    ),
                                     if (title.isNotEmpty && title != name) ...[
                                       const SizedBox(height: 2),
                                       Text(
                                         title,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground),
+                                        style: PrimeTheme.mono(
+                                          fontSize: 10,
+                                          color: PrimeColors.mutedForeground,
+                                        ),
                                       ),
                                     ],
                                   ],
@@ -739,7 +843,10 @@ class _ProcessKillSheetState extends State<_ProcessKillSheet> {
                                 const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.destructive),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: PrimeColors.destructive,
+                                  ),
                                 )
                               else
                                 InkWell(
@@ -747,7 +854,11 @@ class _ProcessKillSheetState extends State<_ProcessKillSheet> {
                                   borderRadius: BorderRadius.circular(20),
                                   child: const Padding(
                                     padding: EdgeInsets.all(4),
-                                    child: Icon(Icons.close, size: 18, color: PrimeColors.destructive),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 18,
+                                      color: PrimeColors.destructive,
+                                    ),
                                   ),
                                 ),
                             ],
@@ -862,7 +973,10 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
       await widget.connect(item);
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _connectingId = null);
     }
@@ -877,7 +991,10 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
       await disconnect(item);
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _disconnectingId = null);
     }
@@ -900,19 +1017,43 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
                 children: [
                   Icon(widget.icon, size: 16, color: PrimeColors.netAccent),
                   const SizedBox(width: 8),
-                  Text(widget.title, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground, letterSpacing: 2)),
+                  Text(
+                    widget.title,
+                    style: PrimeTheme.mono(
+                      fontSize: 12,
+                      color: PrimeColors.mutedForeground,
+                      letterSpacing: 2,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
               if (_error != null)
-                Text(_error!, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.destructive))
+                Text(
+                  _error!,
+                  style: PrimeTheme.mono(
+                    fontSize: 12,
+                    color: PrimeColors.destructive,
+                  ),
+                )
               else if (_items == null)
                 Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground)),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: PrimeColors.mutedForeground,
+                    ),
+                  ),
                 )
               else if (_items!.isEmpty)
-                Text(widget.emptyMessage, style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground))
+                Text(
+                  widget.emptyMessage,
+                  style: PrimeTheme.mono(
+                    fontSize: 12,
+                    color: PrimeColors.mutedForeground,
+                  ),
+                )
               else
                 Flexible(
                   child: ListView.builder(
@@ -924,15 +1065,18 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
                       final connected = widget.connectedOf(item);
                       final connecting = _connectingId == id;
                       final disconnecting = _disconnectingId == id;
-                      final canDisconnect = connected && widget.disconnect != null;
+                      final canDisconnect =
+                          connected && widget.disconnect != null;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: InkWell(
                           onTap: connecting || disconnecting
                               ? null
                               : connected
-                                  ? (canDisconnect ? () => _handleDisconnect(item) : null)
-                                  : () => _handleConnect(item),
+                              ? (canDisconnect
+                                    ? () => _handleDisconnect(item)
+                                    : null)
+                              : () => _handleConnect(item),
                           borderRadius: BorderRadius.circular(6),
                           child: Container(
                             padding: const EdgeInsets.all(14),
@@ -945,11 +1089,21 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(widget.labelOf(item), style: PrimeTheme.mono(fontSize: 13)),
+                                      Text(
+                                        widget.labelOf(item),
+                                        style: PrimeTheme.mono(fontSize: 13),
+                                      ),
                                       const SizedBox(height: 2),
-                                      Text(widget.subtitleOf(item), style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.mutedForeground)),
+                                      Text(
+                                        widget.subtitleOf(item),
+                                        style: PrimeTheme.mono(
+                                          fontSize: 10,
+                                          color: PrimeColors.mutedForeground,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -957,18 +1111,29 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
                                   SizedBox(
                                     width: 14,
                                     height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: PrimeColors.mutedForeground),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: PrimeColors.mutedForeground,
+                                    ),
                                   )
                                 else if (connected)
                                   Text(
                                     canDisconnect ? 'disconnect' : 'connected',
                                     style: PrimeTheme.mono(
                                       fontSize: 10,
-                                      color: canDisconnect ? PrimeColors.destructive : PrimeColors.primary,
+                                      color: canDisconnect
+                                          ? PrimeColors.destructive
+                                          : PrimeColors.primary,
                                     ),
                                   )
                                 else
-                                  Text('connect', style: PrimeTheme.mono(fontSize: 10, color: PrimeColors.netAccent)),
+                                  Text(
+                                    'connect',
+                                    style: PrimeTheme.mono(
+                                      fontSize: 10,
+                                      color: PrimeColors.netAccent,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -1044,198 +1209,14 @@ class _SliderCard extends StatelessWidget {
             child: Text(
               '${value.round()}',
               textAlign: TextAlign.right,
-              style: PrimeTheme.mono(fontSize: 11, color: PrimeColors.mutedForeground),
+              style: PrimeTheme.mono(
+                fontSize: 11,
+                color: PrimeColors.mutedForeground,
+              ),
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _NowPlayingCard extends StatefulWidget {
-  final ApiClient apiClient;
-  final Map<String, dynamic>? nowPlaying;
-  final VoidCallback onPlayPause;
-  final VoidCallback onNext;
-  final VoidCallback onPrevious;
-  final String Function(int) formatTime;
-
-  const _NowPlayingCard({
-    required this.apiClient,
-    required this.nowPlaying,
-    required this.onPlayPause,
-    required this.onNext,
-    required this.onPrevious,
-    required this.formatTime,
-  });
-
-  @override
-  State<_NowPlayingCard> createState() => _NowPlayingCardState();
-}
-
-class _NowPlayingCardState extends State<_NowPlayingCard> with SingleTickerProviderStateMixin {
-  late final AnimationController _spinController;
-
-  @override
-  void initState() {
-    super.initState();
-    _spinController = AnimationController(vsync: this, duration: const Duration(seconds: 12));
-  }
-
-  @override
-  void dispose() {
-    _spinController.dispose();
-    super.dispose();
-  }
-
-  void _syncSpin(bool playing) {
-    if (playing && !_spinController.isAnimating) {
-      _spinController.repeat();
-    } else if (!playing && _spinController.isAnimating) {
-      _spinController.stop();
-    }
-  }
-
-  Widget _buildArt(String? artUrl) {
-    const size = 64.0;
-    final proxied = widget.apiClient.proxiedArtRequest(artUrl);
-
-    Widget fallback = Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: PrimeColors.secondary, shape: BoxShape.circle),
-      child: Icon(Icons.music_note, color: PrimeColors.mutedForeground, size: 24),
-    );
-
-    ImageProvider? provider;
-    if (proxied != null) {
-      provider = NetworkImage(proxied.url, headers: proxied.headers);
-    } else if (artUrl != null && artUrl.startsWith('http')) {
-      provider = NetworkImage(artUrl);
-    }
-
-    if (provider == null) return fallback;
-
-    return ClipOval(
-      child: Image(
-        image: provider,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => fallback,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final nowPlaying = widget.nowPlaying;
-    final active = nowPlaying?['active'] == true;
-    final playing = nowPlaying?['status'] == 'Playing';
-    _syncSpin(playing);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: PrimeColors.card,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: PrimeColors.border),
-      ),
-      child: !active
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Text('nothing playing', style: PrimeTheme.mono(fontSize: 12, color: PrimeColors.mutedForeground)),
-              ),
-            )
-          : Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    RotationTransition(
-                      turns: _spinController,
-                      child: _buildArt(nowPlaying!['art_url'] as String?),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            (nowPlaying['title'] as String?)?.isNotEmpty == true ? nowPlaying['title'] : 'unknown title',
-                            style: PrimeTheme.mono(fontSize: 15, fontWeight: FontWeight.w500),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            [nowPlaying['artist'], nowPlaying['album']]
-                                .where((s) => s != null && (s as String).isNotEmpty)
-                                .join(' — '),
-                            style: PrimeTheme.mono(fontSize: 11, color: PrimeColors.mutedForeground),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                if ((nowPlaying['duration_seconds'] as int? ?? 0) > 0) ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: (nowPlaying['position_seconds'] as int) / (nowPlaying['duration_seconds'] as int),
-                      minHeight: 3,
-                      backgroundColor: PrimeColors.secondary,
-                      valueColor: AlwaysStoppedAnimation(PrimeColors.primary),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(widget.formatTime(nowPlaying['position_seconds'] as int),
-                          style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground)),
-                      Text(widget.formatTime(nowPlaying['duration_seconds'] as int),
-                          style: PrimeTheme.mono(fontSize: 9, color: PrimeColors.mutedForeground)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      onPressed: widget.onPrevious,
-                      icon: Icon(Icons.skip_previous, color: PrimeColors.foreground),
-                      iconSize: 26,
-                    ),
-                    const SizedBox(width: 12),
-                    InkWell(
-                      onTap: widget.onPlayPause,
-                      borderRadius: BorderRadius.circular(30),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: PrimeColors.primary, shape: BoxShape.circle),
-                        child: Icon(
-                          playing ? Icons.pause : Icons.play_arrow,
-                          color: PrimeColors.primaryForeground,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton(
-                      onPressed: widget.onNext,
-                      icon: Icon(Icons.skip_next, color: PrimeColors.foreground),
-                      iconSize: 26,
-                    ),
-                  ],
-                ),
-              ],
-            ),
     );
   }
 }
