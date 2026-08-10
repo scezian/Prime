@@ -61,12 +61,57 @@ class PrimePresets {
     accentDark: Color(0xFF0A1B4D),
   );
 
+  static const oceanRose = PrimePreset(
+    id: 'ocean_rose',
+    label: 'Ocean Rose',
+    background: Color(0xFF060F11),
+    accent: Color(0xFFAA4B6B),
+    accentDark: Color(0xFF2F6570),
+  );
+
+  static const solarPop = PrimePreset(
+    id: 'solar_pop',
+    label: 'Solar Pop',
+    background: Color(0xFF140900),
+    accent: Color(0xFFFF6A00),
+    accentDark: Color(0xFF7A4400),
+  );
+
+  static const neonPulse = PrimePreset(
+    id: 'neon_pulse',
+    label: 'Neon Pulse',
+    background: Color(0xFF0D0313),
+    accent: Color(0xFFE94057),
+    accentDark: Color(0xFF8A2387),
+  );
+
+  static const sunriseSorbet = PrimePreset(
+    id: 'sunrise_sorbet',
+    label: 'Sunrise Sorbet',
+    background: Color(0xFF061410),
+    accent: Color(0xFFF7797D),
+    accentDark: Color(0xFF1F5C42),
+  );
+
+  static const auroraDust = PrimePreset(
+    id: 'aurora_dust',
+    label: 'Aurora Dust',
+    background: Color(0xFF05070F),
+    accent: Color(0xFFB993D6),
+    accentDark: Color(0xFF3D4E7A),
+  );
+
   static const all = <PrimePreset>[
     violet,
     carbonLime,
     royalAurora,
     midnightGold,
     emeraldChrome,
+    oceanRose,
+    solarPop,
+    neonPulse,
+    sunriseSorbet,
+    auroraDust,
   ];
 }
 

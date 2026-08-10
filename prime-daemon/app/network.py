@@ -82,6 +82,56 @@ def list_wifi_networks() -> dict:
     return {"networks": networks}
 
 
+def get_wifi_connection_info() -> dict:
+    """Detailed info about the currently connected WiFi network: SSID,
+    signal, security, band/frequency, and IP address. Returns
+    {"connected": False} if not currently connected to WiFi."""
+    proc = _run(
+        ["nmcli", "-t", "-f", "SSID,SIGNAL,IN-USE,SECURITY,FREQ", "dev", "wifi", "list"],
+        timeout=15,
+    )
+    if proc.returncode != 0:
+        raise NetworkError(proc.stderr.strip() or "failed to scan for wifi networks")
+
+    active = None
+    for line in proc.stdout.strip().splitlines():
+        if not line:
+            continue
+        parts = line.rsplit(":", 4)
+        if len(parts) != 5:
+            continue
+        ssid, signal, in_use, security, freq = parts
+        if in_use.strip() != "*":
+            continue
+        ssid = ssid.replace("\\:", ":")
+        try:
+            signal_val = int(signal)
+        except ValueError:
+            signal_val = 0
+        active = {
+            "connected": True,
+            "ssid": ssid,
+            "signal": signal_val,
+            "security": security.strip() or "Open",
+            "band": freq.strip(),
+        }
+        break
+
+    if active is None:
+        return {"connected": False}
+
+    device = _active_wifi_device()
+    if device:
+        ip_proc = _run(["nmcli", "-t", "-f", "IP4.ADDRESS", "device", "show", device])
+        if ip_proc.returncode == 0:
+            lines = ip_proc.stdout.strip().splitlines()
+            if lines:
+                addr = lines[0].split(":", 1)[-1].split("/")[0]
+                active["ip_address"] = addr
+
+    return active
+
+
 def connect_wifi(ssid: str) -> dict:
     if ssid not in _known_wifi_names():
         raise NetworkError(f'"{ssid}" is not a known network on this machine')

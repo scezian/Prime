@@ -21,8 +21,8 @@ class MarqueeText extends StatefulWidget {
     required this.text,
     required this.style,
     this.gap = 32,
-    this.pixelsPerSecond = 10,
-    this.pauseDuration = const Duration(milliseconds: 1400),
+    this.pixelsPerSecond = 6,
+    this.pauseDuration = const Duration(milliseconds: 1800),
   });
 
   @override
@@ -32,6 +32,7 @@ class MarqueeText extends StatefulWidget {
 class _MarqueeTextState extends State<MarqueeText>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
+  int? _lastPeriodMs;
 
   @override
   void initState() {
@@ -46,10 +47,8 @@ class _MarqueeTextState extends State<MarqueeText>
   void didUpdateWidget(covariant MarqueeText old) {
     super.didUpdateWidget(old);
     if (old.text != widget.text) {
-      _ctrl
-        ..stop()
-        ..value = 0
-        ..repeat();
+      _lastPeriodMs = null;
+      _ctrl.value = 0;
     }
   }
 
@@ -57,6 +56,21 @@ class _MarqueeTextState extends State<MarqueeText>
   void dispose() {
     _ctrl.dispose();
     super.dispose();
+  }
+
+  // AnimationController.repeat() locks in its cycle length the moment
+  // it's called -- later mutating `_ctrl.duration` alone does NOT change
+  // an already-running repeat cycle. So once we know the real duration
+  // (from measured text width, below), we must explicitly re-call
+  // repeat(period: ...) to actually apply it, not just set `.duration`.
+  void _applyPeriod(int periodMs) {
+    if (_lastPeriodMs == periodMs) return;
+    _lastPeriodMs = periodMs;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _ctrl.duration = Duration(milliseconds: periodMs);
+      _ctrl.repeat(period: Duration(milliseconds: periodMs));
+    });
   }
 
   @override
@@ -87,7 +101,7 @@ class _MarqueeTextState extends State<MarqueeText>
             .clamp(1500, 20000);
         final pauseMs = widget.pauseDuration.inMilliseconds;
         final totalMs = scrollMs + pauseMs * 2;
-        _ctrl.duration = Duration(milliseconds: totalMs);
+        _applyPeriod(totalMs);
 
         return ClipRect(
           child: SizedBox(

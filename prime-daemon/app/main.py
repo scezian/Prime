@@ -400,6 +400,14 @@ def network_wifi_list():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/network/wifi/info", dependencies=[Depends(verify_token)])
+def network_wifi_info():
+    try:
+        return network.get_wifi_connection_info()
+    except network.NetworkError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class WifiConnectBody(BaseModel):
     ssid: str
 

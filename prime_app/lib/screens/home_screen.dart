@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import '../services/biometric_auth.dart';
@@ -982,6 +983,8 @@ class _MiniNowPlayingCardState extends State<_MiniNowPlayingCard>
                             mainAxisSize: MainAxisSize.min,
                             children: List.generate(players.length, (i) {
                               final isCurrent = i == pageIndex;
+                              final isPlaying =
+                                  players[i]['status'] == 'Playing';
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 250),
                                 curve: Curves.easeOut,
@@ -992,9 +995,21 @@ class _MiniNowPlayingCardState extends State<_MiniNowPlayingCard>
                                 height: 5,
                                 decoration: BoxDecoration(
                                   color: Colors.white.withValues(
-                                    alpha: isCurrent ? 0.9 : 0.4,
+                                    alpha: isPlaying
+                                        ? 1.0
+                                        : (isCurrent ? 0.9 : 0.4),
                                   ),
                                   borderRadius: BorderRadius.circular(3),
+                                  boxShadow: isPlaying
+                                      ? [
+                                          BoxShadow(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.7,
+                                            ),
+                                            blurRadius: 4,
+                                          ),
+                                        ]
+                                      : null,
                                 ),
                               );
                             }),
@@ -1084,6 +1099,11 @@ class _MiniNowPlayingCardState extends State<_MiniNowPlayingCard>
               icon: Icons.skip_next,
               onTap: () => widget.onNext(player),
             ),
+            if (playing)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: _EqualizerBars(),
+              ),
           ],
         ),
       ],
@@ -1177,6 +1197,73 @@ class _MiniControlButtonState extends State<_MiniControlButton> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Small pulsing 3-bar equalizer, shown as a badge on the album art
+/// while a player is actively playing. Not driven by real audio data --
+/// each bar animates on its own out-of-phase sine wave so they don't
+/// move in lockstep, giving a natural "alive" look rather than a real
+/// spectrum analyzer.
+class _EqualizerBars extends StatefulWidget {
+  const _EqualizerBars();
+
+  @override
+  State<_EqualizerBars> createState() => _EqualizerBarsState();
+}
+
+class _EqualizerBarsState extends State<_EqualizerBars>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const maxBarHeight = 8.0;
+    const minBarHeight = 2.0;
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        final t = _ctrl.value * 2 * math.pi;
+        final heights = [
+          0.5 + 0.5 * math.sin(t * 1.7),
+          0.5 + 0.5 * math.sin(t * 2.3 + 1.4),
+          0.5 + 0.5 * math.sin(t * 1.3 + 2.6),
+        ];
+        return SizedBox(
+          width: 14,
+          height: maxBarHeight,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: heights.map((h) {
+              return Container(
+                width: 2.4,
+                height: minBarHeight + (maxBarHeight - minBarHeight) * h,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(1.2),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 }

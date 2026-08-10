@@ -296,6 +296,9 @@ class ApiClient {
 
   Future<Map<String, dynamic>> getWifiNetworks() => _get('/network/wifi');
 
+  Future<Map<String, dynamic>> getWifiConnectionInfo() =>
+      _get('/network/wifi/info');
+
   Future<Map<String, dynamic>> connectWifi(String ssid) =>
       _post('/network/wifi/connect', {'ssid': ssid});
 

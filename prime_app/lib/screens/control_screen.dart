@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/biometric_auth.dart';
 import '../widgets/liquid_confirm_button.dart';
@@ -175,41 +176,11 @@ class _ControlScreenState extends State<ControlScreen> {
   }
 
   void _openWifiSheet() {
-    _DevicePickerSheet.show(
-      context: context,
-      title: 'WIFI',
-      icon: Icons.wifi,
-      fetch: () => widget.apiClient.getWifiNetworks().then(
-        (r) => r['networks'] as List<dynamic>,
-      ),
-      connect: (item) => widget.apiClient.connectWifi(item['ssid'] as String),
-      disconnect: (item) => widget.apiClient.disconnectWifi(),
-      idOf: (item) => item['ssid'] as String,
-      labelOf: (item) => item['ssid'] as String,
-      connectedOf: (item) => item['connected'] == true,
-      subtitleOf: (item) => '${item['signal']}%',
-      emptyMessage: 'no known networks in range',
-    );
+    _WifiStatusSheet.show(context: context, apiClient: widget.apiClient);
   }
 
   void _openBluetoothSheet() {
-    _DevicePickerSheet.show(
-      context: context,
-      title: 'BLUETOOTH',
-      icon: Icons.bluetooth,
-      fetch: () => widget.apiClient.getBluetoothDevices().then(
-        (r) => r['devices'] as List<dynamic>,
-      ),
-      connect: (item) =>
-          widget.apiClient.connectBluetooth(item['mac'] as String),
-      disconnect: (item) =>
-          widget.apiClient.disconnectBluetooth(item['mac'] as String),
-      idOf: (item) => item['mac'] as String,
-      labelOf: (item) => item['name'] as String,
-      connectedOf: (item) => item['connected'] == true,
-      subtitleOf: (item) => item['mac'] as String,
-      emptyMessage: 'no paired devices',
-    );
+    _BluetoothStatusSheet.show(context: context, apiClient: widget.apiClient);
   }
 
   void _openProcessSheet() {
@@ -876,43 +847,14 @@ class _ProcessKillSheetState extends State<_ProcessKillSheet> {
   }
 }
 
-class _DevicePickerSheet extends StatefulWidget {
-  final String title;
-  final IconData icon;
-  final Future<List<dynamic>> Function() fetch;
-  final Future<dynamic> Function(Map<String, dynamic> item) connect;
-  final Future<dynamic> Function(Map<String, dynamic> item)? disconnect;
-  final String Function(Map<String, dynamic> item) idOf;
-  final String Function(Map<String, dynamic> item) labelOf;
-  final String Function(Map<String, dynamic> item) subtitleOf;
-  final bool Function(Map<String, dynamic> item) connectedOf;
-  final String emptyMessage;
+class _WifiStatusSheet extends StatefulWidget {
+  final ApiClient apiClient;
 
-  const _DevicePickerSheet({
-    required this.title,
-    required this.icon,
-    required this.fetch,
-    required this.connect,
-    this.disconnect,
-    required this.idOf,
-    required this.labelOf,
-    required this.subtitleOf,
-    required this.connectedOf,
-    required this.emptyMessage,
-  });
+  const _WifiStatusSheet({required this.apiClient});
 
   static void show({
     required BuildContext context,
-    required String title,
-    required IconData icon,
-    required Future<List<dynamic>> Function() fetch,
-    required Future<dynamic> Function(Map<String, dynamic> item) connect,
-    Future<dynamic> Function(Map<String, dynamic> item)? disconnect,
-    required String Function(Map<String, dynamic> item) idOf,
-    required String Function(Map<String, dynamic> item) labelOf,
-    required String Function(Map<String, dynamic> item) subtitleOf,
-    required bool Function(Map<String, dynamic> item) connectedOf,
-    required String emptyMessage,
+    required ApiClient apiClient,
   }) {
     showModalBottomSheet(
       context: context,
@@ -921,30 +863,583 @@ class _DevicePickerSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
-      builder: (_) => _DevicePickerSheet(
-        title: title,
-        icon: icon,
-        fetch: fetch,
-        connect: connect,
-        disconnect: disconnect,
-        idOf: idOf,
-        labelOf: labelOf,
-        subtitleOf: subtitleOf,
-        connectedOf: connectedOf,
-        emptyMessage: emptyMessage,
-      ),
+      builder: (_) => _WifiStatusSheet(apiClient: apiClient),
     );
   }
 
   @override
-  State<_DevicePickerSheet> createState() => _DevicePickerSheetState();
+  State<_WifiStatusSheet> createState() => _WifiStatusSheetState();
 }
 
-class _DevicePickerSheetState extends State<_DevicePickerSheet> {
-  List<Map<String, dynamic>>? _items;
+enum _WifiSheetMode { status, scan }
+
+class _WifiStatusSheetState extends State<_WifiStatusSheet> {
+  _WifiSheetMode _mode = _WifiSheetMode.status;
+
+  Map<String, dynamic>? _info;
+  String? _infoError;
+  bool _infoLoading = true;
+
+  List<Map<String, dynamic>>? _networks;
+  String? _networksError;
+  String? _connectingSsid;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInfo();
+  }
+
+  Future<void> _loadInfo() async {
+    setState(() => _infoLoading = true);
+    try {
+      final info = await widget.apiClient.getWifiConnectionInfo();
+      if (!mounted) return;
+      setState(() {
+        _info = info;
+        _infoError = null;
+        _infoLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _infoError = e.toString();
+        _infoLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadNetworks() async {
+    try {
+      final res = await widget.apiClient.getWifiNetworks();
+      if (!mounted) return;
+      setState(() {
+        _networks = (res['networks'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
+        _networksError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _networksError = e.toString());
+    }
+  }
+
+  void _enterScanMode() {
+    setState(() {
+      _mode = _WifiSheetMode.scan;
+      _networks = null;
+      _networksError = null;
+    });
+    _loadNetworks();
+  }
+
+  Future<void> _handleTapNetwork(Map<String, dynamic> item) async {
+    final ssid = item['ssid'] as String;
+    final connected = item['connected'] == true;
+    setState(() => _connectingSsid = ssid);
+    try {
+      if (connected) {
+        await widget.apiClient.disconnectWifi();
+      } else {
+        await widget.apiClient.connectWifi(ssid);
+      }
+      await _loadInfo();
+      if (!mounted) return;
+      setState(() {
+        _mode = _WifiSheetMode.status;
+        _connectingSsid = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _connectingSsid = null);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Widget _infoTile(IconData icon, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: PrimeColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: PrimeColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: PrimeColors.netAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  style: PrimeTheme.text(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: PrimeTheme.text(
+                    fontSize: 10,
+                    color: PrimeColors.mutedForeground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusView() {
+    if (_infoLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 60),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_infoError != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Text(
+          _infoError!,
+          style: PrimeTheme.text(color: PrimeColors.destructive, fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    if (_info?['connected'] != true) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Column(
+          children: [
+            Icon(Icons.wifi_off, size: 40, color: PrimeColors.mutedForeground),
+            const SizedBox(height: 12),
+            Text(
+              'not connected to WiFi',
+              style: PrimeTheme.text(
+                color: PrimeColors.mutedForeground,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final info = _info!;
+    return Column(
+      key: const ValueKey('status'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 88,
+          height: 88,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: PrimeGradients.tileA,
+            boxShadow: PrimeShadows.tile,
+          ),
+          child: const Icon(Icons.wifi, size: 36, color: Colors.white),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          info['ssid'] as String,
+          style: PrimeTheme.text(fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Connected',
+          style: PrimeTheme.text(fontSize: 12, color: PrimeColors.success),
+        ),
+        const SizedBox(height: 20),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 2.6,
+          children: [
+            _infoTile(
+              Icons.settings_input_antenna,
+              'Band',
+              info['band'] as String? ?? '—',
+            ),
+            _infoTile(
+              Icons.language,
+              'IP Address',
+              info['ip_address'] as String? ?? '—',
+            ),
+            _infoTile(
+              Icons.lock_outline,
+              'Security',
+              info['security'] as String? ?? '—',
+            ),
+            _infoTile(
+              Icons.signal_cellular_alt,
+              'Signal',
+              '${info['signal']}%',
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScanView() {
+    if (_networksError != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Text(
+          _networksError!,
+          style: PrimeTheme.text(color: PrimeColors.destructive, fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    if (_networks == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 60),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_networks!.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Text(
+          'no known networks in range',
+          style: PrimeTheme.text(
+            color: PrimeColors.mutedForeground,
+            fontSize: 13,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    return Column(
+      key: const ValueKey('scan'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _OrbitView(
+          items: _networks!.take(7).toList(),
+          idOf: (item) => item['ssid'] as String,
+          labelOf: (item) => item['ssid'] as String,
+          subtitleOf: (item) => '${item['signal']}%',
+          connectedOf: (item) => item['connected'] == true,
+          icon: Icons.wifi,
+          centerIcon: Icons.smartphone,
+          busyId: _connectingSsid,
+          onTap: _handleTapNetwork,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: PrimeColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Icon(Icons.wifi, size: 16, color: PrimeColors.netAccent),
+                const SizedBox(width: 8),
+                Text(
+                  'WIFI',
+                  style: PrimeTheme.mono(
+                    fontSize: 12,
+                    color: PrimeColors.mutedForeground,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 380,
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: _mode == _WifiSheetMode.status
+                      ? _buildStatusView()
+                      : _buildScanView(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _mode == _WifiSheetMode.status
+                    ? _enterScanMode
+                    : () => setState(() => _mode = _WifiSheetMode.status),
+                icon: Icon(
+                  _mode == _WifiSheetMode.status ? Icons.search : Icons.close,
+                  size: 16,
+                ),
+                label: Text(
+                  _mode == _WifiSheetMode.status ? 'Scan networks' : 'Back',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: PrimeColors.primary,
+                  side: BorderSide(color: PrimeColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Nearby known networks arranged in a circle around a central "you are
+/// here" phone icon -- a radar-style scan view instead of a flat list.
+/// Items arranged in a loose circle around a central "you are here" icon,
+/// each node gently drifting in angle and radius (out of sync per node)
+/// so the whole thing reads as alive rather than a static, perfectly
+/// even ring. Shared by both the WiFi and Bluetooth scan views.
+class _OrbitView extends StatefulWidget {
+  final List<Map<String, dynamic>> items;
+  final String Function(Map<String, dynamic> item) idOf;
+  final String Function(Map<String, dynamic> item) labelOf;
+  final String Function(Map<String, dynamic> item) subtitleOf;
+  final bool Function(Map<String, dynamic> item) connectedOf;
+  final IconData icon;
+  final IconData centerIcon;
+  final String? busyId;
+  final void Function(Map<String, dynamic> item) onTap;
+
+  const _OrbitView({
+    required this.items,
+    required this.idOf,
+    required this.labelOf,
+    required this.subtitleOf,
+    required this.connectedOf,
+    required this.icon,
+    required this.centerIcon,
+    required this.busyId,
+    required this.onTap,
+  });
+
+  @override
+  State<_OrbitView> createState() => _OrbitViewState();
+}
+
+class _OrbitViewState extends State<_OrbitView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  static const double _canvasSize = 300;
+  static const double _centerSize = 76;
+  static const double _baseRadius = 108;
+  static const double _nodeSize = 66;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 9),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = widget.items.length;
+    return SizedBox(
+      width: _canvasSize,
+      height: _canvasSize,
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) {
+          final t = _ctrl.value * 2 * math.pi;
+          final points = List.generate(count, (i) {
+            final baseAngle = -math.pi / 2 + (2 * math.pi * i / count);
+            final phase = i * 2.4;
+            final angle = baseAngle + math.sin(t + phase) * 0.16;
+            final radius = _baseRadius + math.sin(t * 1.3 + phase) * 12;
+            return Offset(radius * math.cos(angle), radius * math.sin(angle));
+          });
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size(_canvasSize, _canvasSize),
+                painter: _OrbitLinesPainter(
+                  points: points,
+                  color: PrimeColors.border,
+                ),
+              ),
+              ...List.generate(count, (i) {
+                final item = widget.items[i];
+                final id = widget.idOf(item);
+                final connected = widget.connectedOf(item);
+                final busy = widget.busyId == id;
+                final pos = points[i];
+                return Positioned(
+                  left: _canvasSize / 2 + pos.dx - _nodeSize / 2,
+                  top: _canvasSize / 2 + pos.dy - _nodeSize / 2,
+                  child: GestureDetector(
+                    onTap: busy ? null : () => widget.onTap(item),
+                    child: Container(
+                      width: _nodeSize,
+                      height: _nodeSize,
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: PrimeColors.card,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: connected
+                              ? PrimeColors.primary
+                              : PrimeColors.border,
+                          width: connected ? 2 : 1,
+                        ),
+                        boxShadow: PrimeShadows.card,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (busy)
+                            const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          else
+                            Icon(
+                              widget.icon,
+                              size: 16,
+                              color: connected
+                                  ? PrimeColors.primary
+                                  : PrimeColors.netAccent,
+                            ),
+                          const SizedBox(height: 2),
+                          Text(
+                            widget.labelOf(item),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: PrimeTheme.text(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            widget.subtitleOf(item),
+                            style: PrimeTheme.mono(
+                              fontSize: 7,
+                              color: PrimeColors.mutedForeground,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              Container(
+                width: _centerSize,
+                height: _centerSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: PrimeGradients.tileA,
+                  boxShadow: PrimeShadows.tile,
+                ),
+                child: Icon(widget.centerIcon, color: Colors.white, size: 30),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _OrbitLinesPainter extends CustomPainter {
+  final List<Offset> points;
+  final Color color;
+
+  _OrbitLinesPainter({required this.points, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    for (final p in points) {
+      canvas.drawLine(center, center + p, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _OrbitLinesPainter old) => true;
+}
+
+class _BluetoothStatusSheet extends StatefulWidget {
+  final ApiClient apiClient;
+
+  const _BluetoothStatusSheet({required this.apiClient});
+
+  static void show({
+    required BuildContext context,
+    required ApiClient apiClient,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: PrimeColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (_) => _BluetoothStatusSheet(apiClient: apiClient),
+    );
+  }
+
+  @override
+  State<_BluetoothStatusSheet> createState() => _BluetoothStatusSheetState();
+}
+
+class _BluetoothStatusSheetState extends State<_BluetoothStatusSheet> {
+  _WifiSheetMode _mode = _WifiSheetMode.status;
+
+  List<Map<String, dynamic>>? _devices;
   String? _error;
-  String? _connectingId;
-  String? _disconnectingId;
+  String? _connectingMac;
 
   @override
   void initState() {
@@ -954,10 +1449,11 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
 
   Future<void> _load() async {
     try {
-      final items = await widget.fetch();
+      final res = await widget.apiClient.getBluetoothDevices();
       if (!mounted) return;
       setState(() {
-        _items = items.cast<Map<String, dynamic>>();
+        _devices = (res['devices'] as List<dynamic>)
+            .cast<Map<String, dynamic>>();
         _error = null;
       });
     } catch (e) {
@@ -966,184 +1462,276 @@ class _DevicePickerSheetState extends State<_DevicePickerSheet> {
     }
   }
 
-  Future<void> _handleConnect(Map<String, dynamic> item) async {
-    final id = widget.idOf(item);
-    setState(() => _connectingId = id);
+  Map<String, dynamic>? get _connectedDevice {
+    final devices = _devices;
+    if (devices == null) return null;
+    for (final d in devices) {
+      if (d['connected'] == true) return d;
+    }
+    return null;
+  }
+
+  void _enterScanMode() {
+    setState(() => _mode = _WifiSheetMode.scan);
+    _load();
+  }
+
+  Future<void> _handleTapDevice(Map<String, dynamic> item) async {
+    final mac = item['mac'] as String;
+    final connected = item['connected'] == true;
+    setState(() => _connectingMac = mac);
     try {
-      await widget.connect(item);
+      if (connected) {
+        await widget.apiClient.disconnectBluetooth(mac);
+      } else {
+        await widget.apiClient.connectBluetooth(mac);
+      }
       await _load();
+      if (!mounted) return;
+      setState(() {
+        _mode = _WifiSheetMode.status;
+        _connectingMac = null;
+      });
     } catch (e) {
-      if (mounted)
+      if (mounted) {
+        setState(() => _connectingMac = null);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('$e')));
-    } finally {
-      if (mounted) setState(() => _connectingId = null);
+      }
     }
   }
 
-  Future<void> _handleDisconnect(Map<String, dynamic> item) async {
-    final disconnect = widget.disconnect;
-    if (disconnect == null) return;
-    final id = widget.idOf(item);
-    setState(() => _disconnectingId = id);
-    try {
-      await disconnect(item);
-      await _load();
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
-    } finally {
-      if (mounted) setState(() => _disconnectingId = null);
+  Widget _infoTile(IconData icon, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: PrimeColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: PrimeColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: PrimeColors.netAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  style: PrimeTheme.text(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: PrimeTheme.text(
+                    fontSize: 10,
+                    color: PrimeColors.mutedForeground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusView() {
+    if (_devices == null && _error == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 60),
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Text(
+          _error!,
+          style: PrimeTheme.text(color: PrimeColors.destructive, fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    final device = _connectedDevice;
+    if (device == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Column(
+          children: [
+            Icon(
+              Icons.bluetooth_disabled,
+              size: 40,
+              color: PrimeColors.mutedForeground,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'no device connected',
+              style: PrimeTheme.text(
+                color: PrimeColors.mutedForeground,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      key: const ValueKey('status'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 88,
+          height: 88,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: PrimeGradients.tileA,
+            boxShadow: PrimeShadows.tile,
+          ),
+          child: const Icon(Icons.bluetooth, size: 36, color: Colors.white),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          device['name'] as String,
+          style: PrimeTheme.text(fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Connected',
+          style: PrimeTheme.text(fontSize: 12, color: PrimeColors.success),
+        ),
+        const SizedBox(height: 20),
+        _infoTile(Icons.tag, 'Address', device['mac'] as String),
+      ],
+    );
+  }
+
+  Widget _buildScanView() {
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Text(
+          _error!,
+          style: PrimeTheme.text(color: PrimeColors.destructive, fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    if (_devices == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 60),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_devices!.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Text(
+          'no paired devices',
+          style: PrimeTheme.text(
+            color: PrimeColors.mutedForeground,
+            fontSize: 13,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+    return Column(
+      key: const ValueKey('scan'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _OrbitView(
+          items: _devices!.take(7).toList(),
+          idOf: (item) => item['mac'] as String,
+          labelOf: (item) => item['name'] as String,
+          subtitleOf: (item) => item['mac'] as String,
+          connectedOf: (item) => item['connected'] == true,
+          icon: Icons.bluetooth,
+          centerIcon: Icons.smartphone,
+          busyId: _connectingMac,
+          onTap: _handleTapDevice,
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.of(context).size.height * 0.75;
-
     return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(widget.icon, size: 16, color: PrimeColors.netAccent),
-                  const SizedBox(width: 8),
-                  Text(
-                    widget.title,
-                    style: PrimeTheme.mono(
-                      fontSize: 12,
-                      color: PrimeColors.mutedForeground,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ],
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: PrimeColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-              const SizedBox(height: 14),
-              if (_error != null)
+            ),
+            Row(
+              children: [
+                Icon(Icons.bluetooth, size: 16, color: PrimeColors.netAccent),
+                const SizedBox(width: 8),
                 Text(
-                  _error!,
-                  style: PrimeTheme.mono(
-                    fontSize: 12,
-                    color: PrimeColors.destructive,
-                  ),
-                )
-              else if (_items == null)
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: PrimeColors.mutedForeground,
-                    ),
-                  ),
-                )
-              else if (_items!.isEmpty)
-                Text(
-                  widget.emptyMessage,
+                  'BLUETOOTH',
                   style: PrimeTheme.mono(
                     fontSize: 12,
                     color: PrimeColors.mutedForeground,
-                  ),
-                )
-              else
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _items!.length,
-                    itemBuilder: (context, index) {
-                      final item = _items![index];
-                      final id = widget.idOf(item);
-                      final connected = widget.connectedOf(item);
-                      final connecting = _connectingId == id;
-                      final disconnecting = _disconnectingId == id;
-                      final canDisconnect =
-                          connected && widget.disconnect != null;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: InkWell(
-                          onTap: connecting || disconnecting
-                              ? null
-                              : connected
-                              ? (canDisconnect
-                                    ? () => _handleDisconnect(item)
-                                    : null)
-                              : () => _handleConnect(item),
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: PrimeColors.card,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: PrimeColors.border),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        widget.labelOf(item),
-                                        style: PrimeTheme.mono(fontSize: 13),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        widget.subtitleOf(item),
-                                        style: PrimeTheme.mono(
-                                          fontSize: 10,
-                                          color: PrimeColors.mutedForeground,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (connecting || disconnecting)
-                                  SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: PrimeColors.mutedForeground,
-                                    ),
-                                  )
-                                else if (connected)
-                                  Text(
-                                    canDisconnect ? 'disconnect' : 'connected',
-                                    style: PrimeTheme.mono(
-                                      fontSize: 10,
-                                      color: canDisconnect
-                                          ? PrimeColors.destructive
-                                          : PrimeColors.primary,
-                                    ),
-                                  )
-                                else
-                                  Text(
-                                    'connect',
-                                    style: PrimeTheme.mono(
-                                      fontSize: 10,
-                                      color: PrimeColors.netAccent,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                    letterSpacing: 2,
                   ),
                 ),
-            ],
-          ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 380,
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: _mode == _WifiSheetMode.status
+                      ? _buildStatusView()
+                      : _buildScanView(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _mode == _WifiSheetMode.status
+                    ? _enterScanMode
+                    : () => setState(() => _mode = _WifiSheetMode.status),
+                icon: Icon(
+                  _mode == _WifiSheetMode.status ? Icons.search : Icons.close,
+                  size: 16,
+                ),
+                label: Text(
+                  _mode == _WifiSheetMode.status ? 'Scan devices' : 'Back',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: PrimeColors.primary,
+                  side: BorderSide(color: PrimeColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
