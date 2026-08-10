@@ -2,6 +2,7 @@
 Media playback (via playerctl, MPRIS-based) and volume control (via pamixer).
 Both tools are already present on scez-2.
 """
+import json
 import subprocess
 
 
@@ -228,3 +229,55 @@ def toggle_mute() -> dict:
     if proc.returncode != 0:
         raise ControlError(proc.stderr.strip() or "failed to toggle mute")
     return get_volume()
+
+
+# ---- Per-app audio mixer ----
+
+def list_audio_apps() -> list[dict]:
+    proc = _run(["pactl", "-f", "json", "list", "sink-inputs"])
+    if proc.returncode != 0:
+        raise ControlError(proc.stderr.strip() or "failed to list audio apps")
+    try:
+        raw = json.loads(proc.stdout)
+    except (json.JSONDecodeError, ValueError):
+        return []
+
+    apps = []
+    for item in raw:
+        props = item.get("properties", {})
+        name = props.get("application.name") or props.get("node.name") or "Unknown"
+        subtitle = props.get("media.name", "")
+        volume_map = item.get("volume", {})
+        percent = 0
+        if volume_map:
+            first = next(iter(volume_map.values()))
+            try:
+                percent = int(str(first.get("value_percent", "0%")).rstrip("%"))
+            except ValueError:
+                percent = 0
+        apps.append({
+            "index": item.get("index"),
+            "name": name,
+            "subtitle": subtitle,
+            "volume": percent,
+            "muted": bool(item.get("mute", False)),
+        })
+    return apps
+
+
+def set_app_volume(index: int, level: int) -> dict:
+    level = max(0, min(100, level))
+    proc = _run(["pactl", "set-sink-input-volume", str(index), f"{level}%"])
+    if proc.returncode != 0:
+        raise ControlError(proc.stderr.strip() or "failed to set app volume")
+    return {"index": index, "volume": level}
+
+
+def toggle_app_mute(index: int) -> dict:
+    proc = _run(["pactl", "set-sink-input-mute", str(index), "toggle"])
+    if proc.returncode != 0:
+        raise ControlError(proc.stderr.strip() or "failed to toggle app mute")
+    for app in list_audio_apps():
+        if app["index"] == index:
+            return app
+    return {"index": index}

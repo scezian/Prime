@@ -561,3 +561,33 @@ async def ws_input(websocket: WebSocket):
                 pass  # malformed/unsupported message — drop and keep the socket alive
     except WebSocketDisconnect:
         pass
+
+
+# ---- Per-app audio mixer ----
+
+@app.get("/audio/apps", dependencies=[Depends(verify_token)])
+def audio_list_apps():
+    try:
+        return {"apps": media.list_audio_apps()}
+    except media.ControlError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class AppVolumeBody(BaseModel):
+    level: int
+
+
+@app.post("/audio/apps/{index}/volume", dependencies=[Depends(verify_token)])
+def audio_set_app_volume(index: int, body: AppVolumeBody):
+    try:
+        return media.set_app_volume(index, body.level)
+    except media.ControlError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/audio/apps/{index}/mute-toggle", dependencies=[Depends(verify_token)])
+def audio_toggle_app_mute(index: int):
+    try:
+        return media.toggle_app_mute(index)
+    except media.ControlError as e:
+        raise HTTPException(status_code=500, detail=str(e))

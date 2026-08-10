@@ -280,6 +280,14 @@ class ApiClient {
   Future<Map<String, dynamic>> setVolume(int level) =>
       _post('/audio/volume', {'level': level});
 
+  Future<Map<String, dynamic>> getAudioApps() => _get('/audio/apps');
+
+  Future<Map<String, dynamic>> setAppVolume(int index, int level) =>
+      _post('/audio/apps/$index/volume', {'level': level});
+
+  Future<Map<String, dynamic>> toggleAppMute(int index) =>
+      _post('/audio/apps/$index/mute-toggle', {});
+
   Future<Map<String, dynamic>> toggleMute() => _post('/audio/mute-toggle');
 
   Future<Map<String, dynamic>> getBrightness() => _get('/display/brightness');

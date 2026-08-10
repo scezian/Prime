@@ -187,12 +187,17 @@ class _ControlScreenState extends State<ControlScreen> {
     _ProcessKillSheet.show(context: context, apiClient: widget.apiClient);
   }
 
+  void _openAudioMixerSheet() {
+    _AudioMixerSheet.show(context: context, apiClient: widget.apiClient);
+  }
+
+  void _openDisplaySheet() {
+    _DisplaySheet.show(context: context, apiClient: widget.apiClient);
+  }
+
   @override
   Widget build(BuildContext context) {
     final displayVolume = _draggingVolume ?? _volume.toDouble();
-    final displayBrightness = _draggingBrightness ?? _brightness.toDouble();
-    final displayKbdBacklight =
-        _draggingKbdBacklight ?? _kbdBacklight.toDouble();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Control')),
@@ -223,69 +228,6 @@ class _ControlScreenState extends State<ControlScreen> {
                 ),
               ),
             Text(
-              'VOLUME',
-              style: PrimeTheme.mono(
-                fontSize: 9,
-                color: PrimeColors.mutedForeground,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _SliderCard(
-              value: displayVolume,
-              leadingIcon: _muted
-                  ? Icons.volume_off
-                  : (displayVolume > 50 ? Icons.volume_up : Icons.volume_down),
-              iconColor: _muted ? PrimeColors.destructive : PrimeColors.primary,
-              activeColor: _muted
-                  ? PrimeColors.mutedForeground
-                  : PrimeColors.primary,
-              onIconTap: _toggleMute,
-              onChanged: (v) => setState(() => _draggingVolume = v),
-              onChangeEnd: _onVolumeChangeEnd,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'BRIGHTNESS',
-              style: PrimeTheme.mono(
-                fontSize: 9,
-                color: PrimeColors.mutedForeground,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _SliderCard(
-              value: displayBrightness,
-              leadingIcon: displayBrightness > 50
-                  ? Icons.brightness_high
-                  : Icons.brightness_low,
-              iconColor: PrimeColors.warning,
-              activeColor: PrimeColors.warning,
-              onIconTap: null,
-              onChanged: (v) => setState(() => _draggingBrightness = v),
-              onChangeEnd: _onBrightnessChangeEnd,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'KEYBOARD BACKLIGHT',
-              style: PrimeTheme.mono(
-                fontSize: 9,
-                color: PrimeColors.mutedForeground,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _SliderCard(
-              value: displayKbdBacklight,
-              leadingIcon: Icons.keyboard,
-              iconColor: PrimeColors.netAccent,
-              activeColor: PrimeColors.netAccent,
-              onIconTap: null,
-              onChanged: (v) => setState(() => _draggingKbdBacklight = v),
-              onChangeEnd: _onKbdBacklightChangeEnd,
-            ),
-            const SizedBox(height: 20),
-            Text(
               'NETWORK',
               style: PrimeTheme.mono(
                 fontSize: 9,
@@ -315,6 +257,41 @@ class _ControlScreenState extends State<ControlScreen> {
                     enabled: _bluetoothEnabled,
                     onTap: _openBluetoothSheet,
                     onToggle: _toggleBluetoothRadio,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'SYSTEM',
+              style: PrimeTheme.mono(
+                fontSize: 9,
+                color: PrimeColors.mutedForeground,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _QuickActionTile(
+                    icon: _muted
+                        ? Icons.volume_off
+                        : (displayVolume > 50
+                              ? Icons.volume_up
+                              : Icons.volume_down),
+                    label: 'Audio',
+                    color: PrimeColors.primary,
+                    onTap: _openAudioMixerSheet,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _QuickActionTile(
+                    icon: Icons.brightness_6,
+                    label: 'Display',
+                    color: PrimeColors.warning,
+                    onTap: _openDisplaySheet,
                   ),
                 ),
               ],
@@ -1731,6 +1708,578 @@ class _BluetoothStatusSheetState extends State<_BluetoothStatusSheet> {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AudioButtonCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final VoidCallback onTap;
+
+  const _AudioButtonCard({
+    required this.icon,
+    required this.iconColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Material(
+        color: PrimeColors.card,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            height: 52,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: PrimeColors.border),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18, color: iconColor),
+                const SizedBox(width: 8),
+                Text(
+                  'AUDIO MIXER',
+                  style: PrimeTheme.mono(
+                    fontSize: 11,
+                    color: PrimeColors.mutedForeground,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AudioMixerSheet extends StatefulWidget {
+  final ApiClient apiClient;
+  const _AudioMixerSheet({required this.apiClient});
+
+  static void show({
+    required BuildContext context,
+    required ApiClient apiClient,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: PrimeColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (_) => _AudioMixerSheet(apiClient: apiClient),
+    );
+  }
+
+  @override
+  State<_AudioMixerSheet> createState() => _AudioMixerSheetState();
+}
+
+class _AudioMixerSheetState extends State<_AudioMixerSheet> {
+  List<Map<String, dynamic>>? _apps;
+  String? _error;
+  final Map<int, double> _dragging = {};
+  int? _masterVolume;
+  bool _masterMuted = false;
+  double? _draggingMaster;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await widget.apiClient.getAudioApps();
+      final list = (res['apps'] as List<dynamic>).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      setState(() {
+        _apps = list;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
+
+    try {
+      final vol = await widget.apiClient.getVolume();
+      if (!mounted) return;
+      setState(() {
+        _masterVolume = vol['volume'] as int;
+        _masterMuted = vol['muted'] as bool;
+      });
+    } catch (_) {
+      // Master volume is best-effort; leave last known state.
+    }
+  }
+
+  Future<void> _onMasterChangeEnd(double value) async {
+    final level = value.round();
+    try {
+      await widget.apiClient.setVolume(level);
+      if (!mounted) return;
+      setState(() {
+        _draggingMaster = null;
+        _masterVolume = level;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _draggingMaster = null);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> _toggleMasterMute() async {
+    try {
+      final res = await widget.apiClient.toggleMute();
+      if (!mounted) return;
+      setState(() => _masterMuted = res['muted'] as bool);
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _onChangeEnd(int index, double value) async {
+    final level = value.round();
+    try {
+      await widget.apiClient.setAppVolume(index, level);
+      if (!mounted) return;
+      setState(() {
+        _dragging.remove(index);
+        final app = _apps?.firstWhere(
+          (a) => a['index'] == index,
+          orElse: () => {},
+        );
+        if (app != null && app.isNotEmpty) app['volume'] = level;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _dragging.remove(index));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> _toggleMute(int index) async {
+    try {
+      final res = await widget.apiClient.toggleAppMute(index);
+      if (!mounted) return;
+      setState(() {
+        final app = _apps?.firstWhere(
+          (a) => a['index'] == index,
+          orElse: () => {},
+        );
+        if (app != null && app.isNotEmpty) {
+          app['muted'] = res['muted'] ?? !(app['muted'] as bool);
+        }
+      });
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.75;
+
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.tune, size: 16, color: PrimeColors.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'AUDIO MIXER',
+                    style: PrimeTheme.mono(
+                      fontSize: 12,
+                      color: PrimeColors.mutedForeground,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (_masterVolume != null) ...[
+                Text(
+                  'MASTER',
+                  style: PrimeTheme.mono(
+                    fontSize: 9,
+                    color: PrimeColors.mutedForeground,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Builder(
+                  builder: (context) {
+                    final displayMaster =
+                        _draggingMaster ?? _masterVolume!.toDouble();
+                    return _SliderCard(
+                      value: displayMaster,
+                      leadingIcon: _masterMuted
+                          ? Icons.volume_off
+                          : (displayMaster > 50
+                                ? Icons.volume_up
+                                : Icons.volume_down),
+                      iconColor: _masterMuted
+                          ? PrimeColors.destructive
+                          : PrimeColors.primary,
+                      activeColor: _masterMuted
+                          ? PrimeColors.mutedForeground
+                          : PrimeColors.primary,
+                      onIconTap: _toggleMasterMute,
+                      onChanged: (v) => setState(() => _draggingMaster = v),
+                      onChangeEnd: _onMasterChangeEnd,
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'APPS',
+                  style: PrimeTheme.mono(
+                    fontSize: 9,
+                    color: PrimeColors.mutedForeground,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
+              if (_error != null)
+                Text(
+                  _error!,
+                  style: PrimeTheme.mono(
+                    fontSize: 12,
+                    color: PrimeColors.destructive,
+                  ),
+                )
+              else if (_apps == null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: PrimeColors.mutedForeground,
+                    ),
+                  ),
+                )
+              else if (_apps!.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Text(
+                    'No apps are playing audio.',
+                    style: PrimeTheme.mono(
+                      fontSize: 12,
+                      color: PrimeColors.mutedForeground,
+                    ),
+                  ),
+                )
+              else
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        for (final app in _apps!)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Builder(
+                              builder: (context) {
+                                final index = app['index'] as int;
+                                final muted = app['muted'] as bool;
+                                final baseVolume = (app['volume'] as num)
+                                    .toDouble();
+                                final displayVolume =
+                                    _dragging[index] ?? baseVolume;
+                                final name =
+                                    app['name'] as String? ?? 'Unknown';
+                                final subtitle =
+                                    (app['subtitle'] as String?) ?? '';
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.podcasts,
+                                          size: 14,
+                                          color: PrimeColors.mutedForeground,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                name,
+                                                style: PrimeTheme.mono(
+                                                  fontSize: 12,
+                                                  color: PrimeColors.foreground,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              if (subtitle.isNotEmpty)
+                                                Text(
+                                                  subtitle,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: PrimeTheme.mono(
+                                                    fontSize: 10,
+                                                    color: PrimeColors
+                                                        .mutedForeground,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    _SliderCard(
+                                      value: displayVolume,
+                                      leadingIcon: muted
+                                          ? Icons.volume_off
+                                          : (displayVolume > 50
+                                                ? Icons.volume_up
+                                                : Icons.volume_down),
+                                      iconColor: muted
+                                          ? PrimeColors.destructive
+                                          : PrimeColors.primary,
+                                      activeColor: muted
+                                          ? PrimeColors.mutedForeground
+                                          : PrimeColors.primary,
+                                      onIconTap: () => _toggleMute(index),
+                                      onChanged: (v) =>
+                                          setState(() => _dragging[index] = v),
+                                      onChangeEnd: (v) =>
+                                          _onChangeEnd(index, v),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DisplaySheet extends StatefulWidget {
+  final ApiClient apiClient;
+  const _DisplaySheet({required this.apiClient});
+
+  static void show({
+    required BuildContext context,
+    required ApiClient apiClient,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: PrimeColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (_) => _DisplaySheet(apiClient: apiClient),
+    );
+  }
+
+  @override
+  State<_DisplaySheet> createState() => _DisplaySheetState();
+}
+
+class _DisplaySheetState extends State<_DisplaySheet> {
+  int? _brightness;
+  int? _kbdBacklight;
+  double? _draggingBrightness;
+  double? _draggingKbdBacklight;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final brightness = await widget.apiClient.getBrightness();
+      final kbdBacklight = await widget.apiClient.getKbdBacklight();
+      if (!mounted) return;
+      setState(() {
+        _brightness = brightness['percent'] as int;
+        _kbdBacklight = kbdBacklight['percent'] as int;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _onBrightnessChangeEnd(double value) async {
+    final level = value.round();
+    try {
+      await widget.apiClient.setBrightness(level);
+      if (!mounted) return;
+      setState(() {
+        _draggingBrightness = null;
+        _brightness = level;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _draggingBrightness = null);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> _onKbdBacklightChangeEnd(double value) async {
+    try {
+      final res = await widget.apiClient.setKbdBacklight(value.round());
+      if (!mounted) return;
+      setState(() {
+        _draggingKbdBacklight = null;
+        _kbdBacklight = res['percent'] as int;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _draggingKbdBacklight = null);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final displayBrightness =
+        _draggingBrightness ?? (_brightness ?? 0).toDouble();
+    final displayKbdBacklight =
+        _draggingKbdBacklight ?? (_kbdBacklight ?? 0).toDouble();
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.brightness_6, size: 16, color: PrimeColors.warning),
+                const SizedBox(width: 8),
+                Text(
+                  'DISPLAY',
+                  style: PrimeTheme.mono(
+                    fontSize: 12,
+                    color: PrimeColors.mutedForeground,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (_error != null)
+              Text(
+                _error!,
+                style: PrimeTheme.mono(
+                  fontSize: 12,
+                  color: PrimeColors.destructive,
+                ),
+              )
+            else if (_brightness == null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: PrimeColors.mutedForeground,
+                  ),
+                ),
+              )
+            else ...[
+              Text(
+                'BRIGHTNESS',
+                style: PrimeTheme.mono(
+                  fontSize: 9,
+                  color: PrimeColors.mutedForeground,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _SliderCard(
+                value: displayBrightness,
+                leadingIcon: displayBrightness > 50
+                    ? Icons.brightness_high
+                    : Icons.brightness_low,
+                iconColor: PrimeColors.warning,
+                activeColor: PrimeColors.warning,
+                onIconTap: null,
+                onChanged: (v) => setState(() => _draggingBrightness = v),
+                onChangeEnd: _onBrightnessChangeEnd,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'KEYBOARD BACKLIGHT',
+                style: PrimeTheme.mono(
+                  fontSize: 9,
+                  color: PrimeColors.mutedForeground,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _SliderCard(
+                value: displayKbdBacklight,
+                leadingIcon: Icons.keyboard,
+                iconColor: PrimeColors.netAccent,
+                activeColor: PrimeColors.netAccent,
+                onIconTap: null,
+                onChanged: (v) => setState(() => _draggingKbdBacklight = v),
+                onChangeEnd: _onKbdBacklightChangeEnd,
+              ),
+            ],
           ],
         ),
       ),
