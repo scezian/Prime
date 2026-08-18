@@ -433,7 +433,7 @@ class _QuickActionTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
         decoration: BoxDecoration(
           color: PrimeColors.card,
           borderRadius: BorderRadius.circular(6),
@@ -441,13 +441,13 @@ class _QuickActionTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 8),
+            Icon(icon, size: 20, color: color),
+            const SizedBox(width: 10),
             Flexible(
               child: Text(
                 label,
                 style: PrimeTheme.mono(
-                  fontSize: 10,
+                  fontSize: 12,
                   color: PrimeColors.mutedForeground,
                 ),
                 overflow: TextOverflow.ellipsis,
@@ -456,7 +456,7 @@ class _QuickActionTile extends StatelessWidget {
             const Spacer(),
             Icon(
               Icons.chevron_right,
-              size: 14,
+              size: 16,
               color: PrimeColors.mutedForeground,
             ),
           ],

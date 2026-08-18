@@ -88,6 +88,28 @@ def _find_wayland_display() -> str | None:
     return None
 
 
+
+def _find_hyprland_signature() -> str | None:
+    """Locate the live Hyprland instance signature under
+    XDG_RUNTIME_DIR/hypr/, mirroring _find_wayland_display above, since
+    hyprctl needs HYPRLAND_INSTANCE_SIGNATURE to find its IPC socket and
+    the daemon's inherited environment may lack or have a stale copy.
+    """
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    hypr_dir = Path(runtime_dir) / "hypr"
+    try:
+        candidates = [
+            entry for entry in hypr_dir.iterdir()
+            if entry.is_dir() and (entry / ".socket.sock").exists()
+        ]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        return candidates[0].name
+    except OSError:
+        return None
+
+
 def _wayland_env() -> dict:
     """A copy of the current environment with WAYLAND_DISPLAY corrected/added
     if a live socket can be found. Falls back to the inherited environment
@@ -97,6 +119,9 @@ def _wayland_env() -> dict:
     display = _find_wayland_display()
     if display:
         env["WAYLAND_DISPLAY"] = display
+    signature = _find_hyprland_signature()
+    if signature:
+        env["HYPRLAND_INSTANCE_SIGNATURE"] = signature
     return env
 
 
